@@ -696,3 +696,285 @@ def render_model_health(state, market_rows):
         st.markdown(f"""<div class="{'deployment-card' if live_ok else 'warning-card'}"><div class="dip-label">ETF monitor</div><div class="deployment-big">{'Live-ish' if live_ok else 'Fallback'}</div><div class="small-muted">Source: {state.get('live_source', 'unknown')}</div></div>""", unsafe_allow_html=True)
     with c3:
         st.markdown(f"""<div class="live-card"><div class="dip-label">Backtest sample</div><div class="live-big">{sample:,}</div><div class="small-muted">Completed daily rows.</div></div>""", unsafe_allow_html=True)
+
+
+def _fmt_money(value, prefix="EUR"):
+    try:
+        return f"{prefix} {float(value):,.2f}"
+    except Exception:
+        return f"{prefix} --"
+
+
+def build_end_of_day_brief(active_asset, state, sentiment, vix_val, market_rows):
+    """Create the daily close summary and the next-session execution plan.
+
+    This deliberately avoids pretending to be a broker/exchange feed. It uses the
+    same yfinance data pipeline as the rest of v6.9 and labels the latest
+    intraday close as a proxy until the completed daily candle is available.
+    """
+    chart_df = fetch_chart_data(TICKERS[active_asset], period="1d", interval="5m")
+    live_quote = fetch_live_quote(TICKERS[active_asset])
+
+    current = float(live_quote.get("price") or state.get("live_price") or state.get("spot") or 0)
+    previous_close = float(live_quote.get("previous_close") or state.get("spot") or 0)
+
+    if not chart_df.empty and {"High", "Low", "Close"}.issubset(chart_df.columns):
+        day_high = float(chart_df["High"].max())
+        day_low = float(chart_df["Low"].min())
+        close_proxy = float(chart_df["Close"].iloc[-1])
+        open_proxy = float(chart_df["Open"].iloc[0]) if "Open" in chart_df.columns else previous_close
+    else:
+        day_high = current
+        day_low = current
+        close_proxy = current
+        open_proxy = previous_close
+
+    target = float(state.get("target") or 0)
+    filled_today = bool(day_low <= target) if target else False
+    distance_close = close_proxy - target if target else 0
+    distance_pct = (distance_close / target * 100) if target else 0
+    intraday_range = day_high - day_low
+    intraday_range_pct = (intraday_range / previous_close * 100) if previous_close else 0
+    day_change_pct = ((close_proxy / previous_close) - 1) * 100 if previous_close else float(state.get("live_change_pct") or 0)
+
+    fill_rate_1d = float(state.get("stats1", {}).get("fill_rate", 0))
+    fill_rate_5d = float(state.get("stats5", {}).get("fill_rate", 0))
+    opportunity = int(state.get("opportunity_v2", {}).get("total", 0))
+    dip_score = int(state.get("dip_stats", {}).get("opportunity_score", 0))
+    regime = state.get("regime", {}).get("regime", "Unknown")
+
+    if filled_today:
+        today_result = "Target touched today"
+        today_takeaway = "The limit level was reached intraday. If an order was active at the target and the exchange had enough liquidity, it should have had a chance to fill."
+    elif distance_pct <= 0.35:
+        today_result = "Very close miss"
+        today_takeaway = "The ETF came close to the target but did not touch it. Do not chase upward; recalculate tomorrow after the completed candle."
+    elif day_change_pct < -0.4:
+        today_result = "Weak day, target not reached"
+        today_takeaway = "The ETF was soft, but the planned discount was not reached. Keep discipline and let the next completed candle reset the plan."
+    else:
+        today_result = "Target not reached"
+        today_takeaway = "The market stayed above the target. This is normal for a limit-order system; patience is part of the edge."
+
+    if sentiment.get("score", 50) >= 70 and day_change_pct >= 0:
+        next_bias = "Patient / do not chase"
+        next_action = "Keep the DAY limit logic. If the ETF opens higher, do not lift the order unless you intentionally choose a manual DCA buy."
+    elif sentiment.get("score", 50) <= 44 or day_change_pct < -0.5:
+        next_bias = "Good environment for limit discipline"
+        next_action = "Place the next DAY limit after confirming IBKR bid/ask and spreads. Extra deployment only if your dip ladder triggers."
+    else:
+        next_bias = "Standard execution"
+        next_action = "Use the calculated target as the next-session reference and avoid emotional changes during the session."
+
+    if vix_val >= 25:
+        risk_note = "VIX is elevated. Confirm spreads before placing orders and avoid increasing size beyond the plan."
+    else:
+        risk_note = "Volatility is normal. Standard order size is acceptable if it matches your monthly plan."
+
+    deployment = state.get("deployment", {})
+    planned_amount = int(deployment.get("total_amount", 20000) or 20000)
+    est_shares = int(planned_amount / target) if target else 0
+
+    market_lines = []
+    for row in market_rows[:8]:
+        try:
+            market_lines.append(f"- {row['Market']}: {row['Value']} ({float(row['Change']):+.2f}%)")
+        except Exception:
+            pass
+
+    now_bahrain = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+    order_line = f"BUY {active_asset} IBIS LMT {target:.2f} DAY"
+
+    markdown = f"""# PALI Execute End-of-Day Brief
+
+Generated: {now_bahrain.strftime('%Y-%m-%d %H:%M Bahrain')}  
+ETF: {active_asset}  
+Engine: v6.9.1-eod
+
+## 1. What happened today
+- Result: **{today_result}**
+- Previous close / basis: **{_fmt_money(previous_close)}**
+- Latest close proxy: **{_fmt_money(close_proxy)}** ({day_change_pct:+.2f}%)
+- Intraday low: **{_fmt_money(day_low)}**
+- Intraday high: **{_fmt_money(day_high)}**
+- Intraday range: **{intraday_range_pct:.2f}%**
+- Target: **{_fmt_money(target)}**
+- Close distance to target: **{_fmt_money(distance_close)}** ({distance_pct:+.2f}%)
+
+**Takeaway:** {today_takeaway}
+
+## 2. Market context
+- Sentiment: **{sentiment.get('label', 'Mixed')}** ({int(sentiment.get('score', 50))}/100)
+- VIX: **{float(vix_val):.2f}**
+- Regime: **{regime}**
+- Opportunity score: **{opportunity}/100**
+- Dip rarity score: **{dip_score}/100**
+
+{chr(10).join(market_lines)}
+
+## 3. Plan for the next trading day
+- Bias: **{next_bias}**
+- Action: {next_action}
+- Order reference: `{order_line}`
+- Planned amount: **EUR {planned_amount:,.0f}**
+- Estimated shares at target: **{est_shares}**
+- Historical fill probability: **{fill_rate_1d:.1f}% next day**, **{fill_rate_5d:.1f}% within 5 trading days**
+
+## 4. Guardrails
+- {risk_note}
+- Confirm the live IBKR bid/ask before trading.
+- Use DAY order unless you intentionally want to re-check the target tomorrow.
+- Do not convert a missed limit into a market order because of frustration.
+"""
+
+    row = {
+        "generated_bahrain": now_bahrain.strftime("%Y-%m-%d %H:%M"),
+        "etf": active_asset,
+        "result": today_result,
+        "previous_close": round(previous_close, 4),
+        "close_proxy": round(close_proxy, 4),
+        "day_change_pct": round(day_change_pct, 4),
+        "day_low": round(day_low, 4),
+        "day_high": round(day_high, 4),
+        "target": round(target, 4),
+        "target_touched": filled_today,
+        "distance_close_eur": round(distance_close, 4),
+        "distance_close_pct": round(distance_pct, 4),
+        "sentiment": sentiment.get("label", "Mixed"),
+        "sentiment_score": int(sentiment.get("score", 50)),
+        "vix": round(float(vix_val), 2),
+        "regime": regime,
+        "opportunity_score": opportunity,
+        "next_bias": next_bias,
+        "next_order": order_line,
+        "planned_amount_eur": planned_amount,
+        "estimated_shares": est_shares,
+        "fill_probability_1d": round(fill_rate_1d, 2),
+        "fill_probability_5d": round(fill_rate_5d, 2),
+    }
+
+    return markdown, row
+
+
+def render_end_of_day_page(active_asset, state, sentiment, vix_val, market_rows):
+    st.markdown("### End-of-Day Summary + Next-Day Plan")
+    st.write(
+        "Use this after the European ETF session is effectively finished. It summarizes the day, checks whether the target was touched, and prepares tomorrow's execution plan."
+    )
+
+    markdown, row = build_end_of_day_brief(active_asset, state, sentiment, vix_val, market_rows)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Today", row["result"])
+    c2.metric("Target", f"EUR {row['target']:.2f}")
+    c3.metric("Close proxy", f"EUR {row['close_proxy']:.2f}", f"{row['day_change_pct']:+.2f}%")
+    c4.metric("Next bias", row["next_bias"])
+
+    st.markdown("#### Brief")
+    st.markdown(markdown)
+
+    summary_df = pd.DataFrame([row])
+    st.markdown("#### Structured log row")
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "Download end-of-day brief (.md)",
+        markdown.encode("utf-8"),
+        file_name=f"pali_eod_{active_asset}_{row['generated_bahrain'].replace(':','').replace(' ','_')}.md",
+        mime="text/markdown",
+    )
+    st.download_button(
+        "Download structured row (.csv)",
+        summary_df.to_csv(index=False).encode("utf-8"),
+        file_name=f"pali_eod_{active_asset}_{row['generated_bahrain'].replace(':','').replace(' ','_')}.csv",
+        mime="text/csv",
+    )
+
+    from pathlib import Path
+    eod_path = Path("pali_eod_summaries.csv")
+    if st.button("Save this EOD summary to local CSV"):
+        if eod_path.exists():
+            old = pd.read_csv(eod_path)
+            out = pd.concat([old, summary_df], ignore_index=True)
+        else:
+            out = summary_df
+        out.to_csv(eod_path, index=False)
+        st.success("Saved to pali_eod_summaries.csv")
+
+    if eod_path.exists():
+        st.markdown("#### Previous EOD summaries")
+        history = pd.read_csv(eod_path)
+        st.dataframe(history.tail(30), use_container_width=True, hide_index=True)
+
+
+def render_daily_intelligence_page(active_asset, state, sentiment, vix_val, market_rows):
+    """v6.10 Investment Intelligence panel: market explanation + deployment windows + email draft."""
+    from market_context import classify_market_context
+    from deployment_engine import score_deployment_windows, windows_as_dicts
+    from email_report import build_daily_intelligence_email
+
+    context = classify_market_context(market_rows, vix_val, sentiment)
+    windows = score_deployment_windows(active_asset, state, context, vix_val)
+    window_rows = windows_as_dicts(windows)
+    active_window = next((w for w in windows if w.etf == active_asset), windows[0])
+
+    st.markdown("### Investment Intelligence Panel")
+    st.write("This page explains what is happening in the market and converts it into estimated deployment windows for each ETF. These are probability-based windows, not exact price predictions.")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Market regime", context.regime, f"{context.score}/100")
+    c2.metric("Active ETF", active_asset)
+    c3.metric("Best window", active_window.suggested_window)
+    c4.metric("Confidence", f"{active_window.confidence}/100")
+
+    st.markdown("#### What is happening in the market")
+    st.info(context.explanation)
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### Key drivers")
+        for item in context.drivers:
+            st.markdown(f"- {item}")
+    with right:
+        st.markdown("#### Risks / guardrails")
+        for item in context.risks:
+            st.markdown(f"- {item}")
+
+    st.markdown("#### Best estimated deployment date/time windows")
+    st.caption("The logic uses current regime, ETF profile, volatility, target distance and your DCA discipline. XEON and U03A intentionally avoid false precision because timing is less important for cash-like instruments.")
+    df = pd.DataFrame(window_rows)
+    df = df[["etf", "role", "action", "suggested_window", "confidence", "reason", "guardrail"]]
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Tomorrow's concise plan")
+    st.markdown(f"""
+    <div class="command-card">
+        <div class="command-label">Recommended behaviour</div>
+        <div class="command-action">{active_window.action}</div>
+        <div class="command-text"><b>Window:</b> {active_window.suggested_window}</div>
+        <div class="command-text"><b>Reason:</b> {active_window.reason}</div>
+        <div class="code-strip">BUY {active_asset} IBIS LMT {float(state.get('target', 0)):.2f} DAY</div>
+        <div class="small-muted">Guardrail: {active_window.guardrail}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("#### Email draft")
+    email = build_daily_intelligence_email(active_asset, state, context, windows)
+    st.text_input("Subject", value=email["subject"])
+    st.text_area("Plain text email", value=email["text"], height=360)
+
+    st.download_button(
+        "Download email as HTML",
+        email["html"].encode("utf-8"),
+        file_name="pali_execute_daily_intelligence_email.html",
+        mime="text/html",
+    )
+    st.download_button(
+        "Download email as TXT",
+        email["text"].encode("utf-8"),
+        file_name="pali_execute_daily_intelligence_email.txt",
+        mime="text/plain",
+    )
+
+    st.markdown("#### Design note")
+    st.caption("Next step after this version: connect SMTP/Gmail and schedule this page to run automatically after Xetra close.")

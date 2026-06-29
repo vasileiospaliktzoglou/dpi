@@ -25,6 +25,8 @@ from ui import (
     render_quant_lab,
     render_timing_analytics,
     render_journal_page,
+    render_end_of_day_page,
+    render_daily_intelligence_page,
 )
 
 st.set_page_config(page_title=f"{APP_TITLE} v{APP_VERSION}", layout="wide", initial_sidebar_state="expanded")
@@ -254,7 +256,7 @@ st.sidebar.caption("Market Watch + ETF monitor use live-ish Yahoo quotes with 30
 
 # ---------------- MAIN CONTROLS ----------------
 active_asset = st.radio("ETF", list(TICKERS.keys()), key="active_asset", horizontal=True)
-page = st.radio("Page", ["Dashboard", "Market Intelligence", "Learn", "Quant Lab", "Timing", "Journal"], key="page", horizontal=True)
+page = st.radio("Page", ["Dashboard", "Daily Intelligence", "EOD Plan", "Market Intelligence", "Learn", "Quant Lab", "Timing", "Journal"], key="page", horizontal=True)
 
 
 # ---------------- DATA ----------------
@@ -269,6 +271,14 @@ df_clean = state["df_clean"]
 # ---------------- ROUTING ----------------
 if page == "Dashboard":
     render_dashboard(active_asset, state, sentiment, vix_val, market_rows)
+
+elif page == "Daily Intelligence":
+    render_topbar()
+    render_daily_intelligence_page(active_asset, state, sentiment, vix_val, market_rows)
+
+elif page == "EOD Plan":
+    render_topbar()
+    render_end_of_day_page(active_asset, state, sentiment, vix_val, market_rows)
 
 elif page == "Market Intelligence":
     render_topbar()
