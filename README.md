@@ -1,39 +1,17 @@
-# DPI v6 Pro
+# PALI Execute v6.9 Professional Command Center
 
-Stable pre-v7 professional build of Daily Portfolio Intelligence.
+Professional UX/UI redesign focused on:
 
-## Why this version
+- dashboard header / mission-control layout
+- KPI strip above chart
+- central isolated chart surface
+- execution command below chart
+- decision support cards below execution
+- cleaner mobile responsiveness
+- plain-English interpretation of sentiment and execution metrics
 
-This is the best pre-v7 version:
-- One `app.py`
-- No fragile package imports
-- No Streamlit sliders
-- Full dashboard experience
-- ATR trap engine
-- RSI context
-- 200DMA context
-- Daily market sentiment
-- Opportunity meter
-- Professional dark UI
+Run:
 
-## Upload to GitHub
-
-Upload the **contents** of this folder to the repository root.
-
-Repository root should contain:
-
-```text
-app.py
-requirements.txt
-README.md
-.gitignore
-.streamlit/config.toml
-```
-
-## Streamlit Cloud
-
-Main file path:
-
-```text
-app.py
+```bash
+streamlit run app.py
 ```

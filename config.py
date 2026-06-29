@@ -19,7 +19,7 @@ BENCHMARKS = {
 }
 
 APP_TITLE = "PALI Execute"
-APP_VERSION = "7.0"
+APP_VERSION = "6.9"
 
 DEFAULT_ETF = "V60A"
 DEFAULT_PAGE = "Dashboard"
