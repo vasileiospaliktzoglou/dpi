@@ -167,120 +167,56 @@ def render_command_center(asset, state):
     )
 
 
-
-def render_etf_decision_cards(active_asset, active_state, vix_val):
-    """Compact ETF cards used as the single plan overview on the dashboard."""
-    cards = []
-    for ticker in TICKERS.keys():
-        try:
-            state_i = active_state if ticker == active_asset else calculate_state(ticker, vix_val)
-            if state_i is None:
-                continue
-            live = float(state_i.get("live_price", state_i.get("spot", 0)) or 0)
-            target = float(state_i.get("target", 0) or 0)
-            distance = ((live - target) / target * 100) if target else 0
-            fill = float(state_i.get("stats1", {}).get("fill_rate", 0) or 0)
-            action = state_i.get("decision", "WAIT")
-            tone = "buy" if "BUY" in action.upper() else "watch" if distance <= 0.75 else "wait"
-            cards.append((ticker, state_i, live, target, distance, fill, action, tone))
-        except Exception:
-            continue
-
-    cols = st.columns(max(1, len(cards)))
-    for col, (ticker, state_i, live, target, distance, fill, action, tone) in zip(cols, cards):
-        with col:
-            active = " active" if ticker == active_asset else ""
-            st.markdown(f"""
-            <div class="pro-etf-card {tone}{active}">
-                <div class="pro-etf-top">
-                    <div>
-                        <div class="pro-etf-label">{ticker}</div>
-                        <div class="pro-etf-role">Core deployment candidate</div>
-                    </div>
-                    <div class="pro-badge {tone}">{action}</div>
-                </div>
-                <div class="pro-etf-price">{fmt_eur(target)}</div>
-                <div class="pro-etf-sub">Target limit reference</div>
-                <div class="pro-meter"><div style="width:{min(100,max(5,100-distance*18)):.0f}%"></div></div>
-                <div class="pro-etf-grid">
-                    <div><span>Live</span><b>{fmt_eur(live)}</b></div>
-                    <div><span>Gap</span><b>{distance:.2f}%</b></div>
-                    <div><span>Fill</span><b>{fill:.1f}%</b></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-
 def render_dashboard(asset, state, sentiment, vix_val, market_rows):
-    """v6.10.4 consolidated dashboard: one decision, one plan, less duplication."""
     render_topbar()
-    live_price = float(state.get("live_price", state.get("spot", 0)) or 0)
-    target = float(state.get("target", 0) or 0)
-    distance_pct = ((live_price - target) / target * 100) if target else 0
-    sent_label, sent_text = sentiment_plain_label(int(sentiment.get("score", 50)))
-    confidence = confidence_word(state.get("suitability", 0))
-    next_fill = float(state.get("stats1", {}).get("fill_rate", 0) or 0)
-    status_tone = "green" if distance_pct <= 0.25 else "amber" if distance_pct <= 0.75 else "red"
 
-    st.markdown(f"""
-    <div class="pro-hero">
-        <div class="pro-hero-left">
-            <div class="pro-kicker">Today’s decision</div>
-            <div class="pro-title">{state['decision']}</div>
-            <div class="pro-subtitle">Use the target as a DAY limit reference after checking the live IBKR bid/ask. The dashboard only shows the current decision; the explanation lives in Daily Intelligence.</div>
-            <div class="pro-command">BUY {asset} IBIS LMT {target:.2f} DAY</div>
+    st.markdown("<div class='section-title'>Mission control</div>", unsafe_allow_html=True)
+    render_kpi_strip(asset, state, sentiment, vix_val)
+
+    st.markdown("<div class='section-title'>Main execution chart</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-subtitle'>The chart is isolated so price action, current price, previous close and limit target are readable.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='chart-stage'>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="chart-header">
+            <div>
+                <div class="chart-title">{asset} | Live target proximity radar</div>
+                <div class="chart-caption">1D by default. Green/red line shows price above or below previous close; target line shows the planned DAY limit.</div>
+            </div>
         </div>
-        <div class="pro-hero-right">
-            <div class="pro-target-label">Target limit</div>
-            <div class="pro-target">{fmt_eur(target)}</div>
-            <div class="pro-status {status_tone}">{distance_pct:.2f}% from target</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
+    render_chart(asset, state["target"], atr=state.get("atr"))
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.markdown(f"<div class='pro-stat'><span>Live price</span><b>{fmt_eur(live_price)}</b><em>{state.get('live_source','live-ish')}</em></div>", unsafe_allow_html=True)
-    with k2:
-        st.markdown(f"<div class='pro-stat'><span>Market regime</span><b>{sent_label}</b><em>{sent_text}</em></div>", unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"<div class='pro-stat'><span>Next-day fill</span><b>{next_fill:.1f}%</b><em>Similar historical setups</em></div>", unsafe_allow_html=True)
-    with k4:
-        st.markdown(f"<div class='pro-stat'><span>Model confidence</span><b>{confidence}</b><em>Suitability score {state.get('suitability',0)}/100</em></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Execution command</div>", unsafe_allow_html=True)
+    render_command_center(asset, state)
 
-    st.markdown("<div class='pro-section'><div><b>ETF deployment board</b><span> One card per ETF. No repeated commentary.</span></div></div>", unsafe_allow_html=True)
-    render_etf_decision_cards(asset, state, vix_val)
+    st.markdown("<div class='section-title'>Decision support</div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        render_market_sentiment(sentiment)
+    with c2:
+        render_decision_confidence(state, vix_val)
+    with c3:
+        render_live_execution_tracker(asset, state)
 
-    left, right = st.columns([1.55, 1])
-    with left:
-        st.markdown("<div class='pro-section'><div><b>Price vs target</b><span> The only chart needed on the dashboard.</span></div></div>", unsafe_allow_html=True)
-        st.markdown("<div class='pro-chart-shell'>", unsafe_allow_html=True)
-        render_chart(asset, target, atr=state.get("atr"))
-        st.markdown("</div>", unsafe_allow_html=True)
-    with right:
-        st.markdown("<div class='pro-section'><div><b>Next action</b><span> Operational checklist.</span></div></div>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class="pro-plan-card">
-            <div class="pro-plan-step"><b>1</b><span>Check IBKR live bid/ask for {asset}</span></div>
-            <div class="pro-plan-step"><b>2</b><span>Use {fmt_eur(target)} only if spread is normal</span></div>
-            <div class="pro-plan-step"><b>3</b><span>Do not chase if price stays above target</span></div>
-            <div class="pro-plan-step"><b>4</b><span>Review Daily Intelligence after Xetra close</span></div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Explanation and monitoring</div>", unsafe_allow_html=True)
+    e1, e2 = st.columns(2)
+    with e1:
+        render_why_today(state, vix_val)
+        render_previous_target_validation(state)
+    with e2:
+        render_dip_engine(state)
+        render_data_freshness(state)
 
-    with st.expander("Diagnostics and explanation", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            render_market_sentiment(sentiment)
-        with c2:
-            render_decision_confidence(state, vix_val)
-        with c3:
-            render_live_execution_tracker(asset, state)
-        e1, e2 = st.columns(2)
-        with e1:
-            render_why_today(state, vix_val)
-        with e2:
-            render_data_freshness(state)
+    st.markdown("<div class='section-title'>Portfolio execution view</div>", unsafe_allow_html=True)
+    p1, p2 = st.columns(2)
+    with p1:
+        render_etf_priority_board(vix_val)
+    with p2:
+        render_model_health(state, market_rows)
 
 
 # ---------------- SIDEBAR ----------------
@@ -320,7 +256,7 @@ st.sidebar.caption("Market Watch + ETF monitor use live-ish Yahoo quotes with 30
 
 # ---------------- MAIN CONTROLS ----------------
 active_asset = st.radio("ETF", list(TICKERS.keys()), key="active_asset", horizontal=True)
-page = st.radio("Workspace", ["Dashboard", "Daily Intelligence", "EOD Plan", "Journal", "Research Lab"], key="page", horizontal=True)
+page = st.radio("Page", ["Dashboard", "Daily Intelligence", "EOD Plan", "Market Intelligence", "Learn", "Quant Lab", "Timing", "Journal"], key="page", horizontal=True)
 
 
 # ---------------- DATA ----------------
@@ -344,21 +280,26 @@ elif page == "EOD Plan":
     render_topbar()
     render_end_of_day_page(active_asset, state, sentiment, vix_val, market_rows)
 
+elif page == "Market Intelligence":
+    render_topbar()
+    render_market_sentiment(sentiment)
+    render_market_intelligence(market_rows)
+    render_etf_priority_board(vix_val)
+    st.markdown("### ETF Watch")
+    render_etf_matrix(vix_val)
+
+elif page == "Learn":
+    render_topbar()
+    render_learn_page(active_asset, state, vix_val)
+
+elif page == "Quant Lab":
+    render_topbar()
+    render_quant_lab(state, df_clean)
+
+elif page == "Timing":
+    render_topbar()
+    render_timing_analytics(active_asset, state)
+
 elif page == "Journal":
     render_topbar()
     render_journal_page(active_asset, state, vix_val)
-
-elif page == "Research Lab":
-    render_topbar()
-    st.markdown("<div class='page-intro'><b>Research Lab</b><br/>Advanced diagnostics are grouped here so the dashboard remains clean.</div>", unsafe_allow_html=True)
-    tab1, tab2, tab3, tab4 = st.tabs(["Market", "ETF Matrix", "Quant", "Timing"])
-    with tab1:
-        render_market_sentiment(sentiment)
-        render_market_intelligence(market_rows)
-        render_etf_priority_board(vix_val)
-    with tab2:
-        render_etf_matrix(vix_val)
-    with tab3:
-        render_quant_lab(state, df_clean)
-    with tab4:
-        render_timing_analytics(active_asset, state)

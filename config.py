@@ -18,8 +18,8 @@ BENCHMARKS = {
     "BTC": "BTC-USD",
 }
 
-APP_TITLE = "EXECUTE"
-APP_VERSION = "6.10.4-ux-consolidation"
+APP_TITLE = "PALI Execute"
+APP_VERSION = "6.10-daily-intelligence"
 
 DEFAULT_ETF = "V60A"
 DEFAULT_PAGE = "Dashboard"

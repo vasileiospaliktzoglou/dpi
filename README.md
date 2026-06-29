@@ -1,27 +1,23 @@
-# EXECUTE v6.10.4 UX Consolidation
+# PALI Execute v6.10 - Daily Intelligence Edition
 
-Professional UI/UX cleanup release.
-
-## What changed
-
-- Dashboard rebuilt as a clean decision screen.
-- One source of truth: Dashboard = today’s command, Daily Intelligence = explanation, Journal/Research Lab = history and diagnostics.
-- Removed duplicate explanation blocks from the main flow.
-- Added professional ETF deployment cards for V60A, VNGA80 and VWCE only.
-- Grouped advanced pages into Research Lab tabs.
-- Daily Intelligence now uses a cleaner story → deployment plan layout.
-- Excel remains internal app memory at `data/PALI_EXECUTE_DATA.xlsx`.
-- No Excel download button.
-- No XEON/U03A.
-- No personal name in report text.
-
-## Run
+Run:
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Notes
+## New in v6.10
 
-This version is still a local Streamlit application. Market data uses the existing live-ish quote pipeline and should be confirmed against IBKR before executing orders.
+Added a **Daily Intelligence** page that provides:
+
+- Plain-English market explanation
+- Current regime classification
+- ETF-specific deployment window estimates
+- Best estimated time window for V60A, VNGA80, VWCE, XEON and U03A
+- Guardrails for each ETF
+- Downloadable daily email draft in TXT and HTML
+
+## Important
+
+This version does **not** execute orders and does **not** send email automatically yet. It generates the intelligence report and email draft safely. The next step is to connect SMTP/Gmail and schedule it after Xetra close.
