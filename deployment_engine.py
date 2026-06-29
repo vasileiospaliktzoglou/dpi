@@ -1,47 +1,14 @@
 """
-PALI Execute v6.10 - Deployment Window Engine
-
-Scores next-session deployment windows for each ETF using transparent rules.
-It recommends windows, not exact predictions.
+Deployment window engine for EXECUTE.
+Only the selected ETF is shown as the main recommendation.
+Other ETFs are available only as a compact comparison inside an expander.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Dict, List
 
-
-ETF_PROFILES = {
-    "V60A": {
-        "role": "Core balanced 60/40 accumulator",
-        "best_window": "10:00-12:00 CET / 11:00-13:00 Bahrain",
-        "secondary_window": "16:30-18:00 Bahrain",
-        "sensitivity": "Medium equity + bond sensitivity",
-    },
-    "VNGA80": {
-        "role": "Core growth 80/20 accumulator",
-        "best_window": "16:30-18:00 Bahrain",
-        "secondary_window": "10:00-12:00 CET / 11:00-13:00 Bahrain",
-        "sensitivity": "High equity sensitivity",
-    },
-    "VWCE": {
-        "role": "Global equity accumulator",
-        "best_window": "16:30-18:30 Bahrain",
-        "secondary_window": "Friday afternoon if no major event risk",
-        "sensitivity": "Very high equity + USD exposure",
-    },
-    "XEON": {
-        "role": "EUR cash-like parking vehicle",
-        "best_window": "Any liquid market hour",
-        "secondary_window": "Avoid only very wide spreads",
-        "sensitivity": "Very low price timing sensitivity",
-    },
-    "U03A": {
-        "role": "USD Treasury bill parking vehicle",
-        "best_window": "Any liquid LSE hour; check FX first",
-        "secondary_window": "After EUR/USD review",
-        "sensitivity": "Low duration risk, medium FX relevance",
-    },
-}
+from config import ETF_META
 
 
 @dataclass
@@ -55,69 +22,69 @@ class DeploymentWindow:
     guardrail: str
 
 
-def _base_confidence(etf: str, market_context, vix_val: float) -> int:
-    if etf in ["XEON", "U03A"]:
-        return 92 if vix_val < 25 else 85
+def _base_confidence(market_context, vix_val: float) -> int:
     if market_context.regime == "Risk-On":
         return 58
     if market_context.regime == "Neutral":
-        return 68
-    if market_context.regime == "Defensive":
-        return 76
+        return 66
+    if market_context.regime in ["Defensive", "Risk-Off"]:
+        return 74
     return 61
 
 
-def score_deployment_windows(active_asset: str, state: dict, market_context, vix_val: float) -> List[DeploymentWindow]:
-    """Return deployment guidance for all tracked ETFs."""
-    rows: List[DeploymentWindow] = []
-    active_target_distance = 999.0
+def _distance_to_target(state: dict) -> float:
     try:
         live = float(state.get("live_price", state.get("spot")))
         target = float(state.get("target"))
-        active_target_distance = ((live - target) / target) * 100
+        return ((live - target) / target) * 100
     except Exception:
-        pass
+        return 999.0
 
-    for etf, profile in ETF_PROFILES.items():
-        conf = _base_confidence(etf, market_context, vix_val)
-        suggested = profile["best_window"]
-        action = "Wait for target zone"
-        guardrail = "Confirm live bid/ask spread before placing an order."
-        reason = f"{profile['sensitivity']}; {market_context.tomorrow_bias}"
 
-        if etf == active_asset:
-            if active_target_distance <= 0.20:
-                action = "Deploy if target trades"
-                conf = min(90, conf + 12)
-                reason = "Active ETF is very close to the limit target; execution probability is elevated."
-            elif active_target_distance <= 0.75:
-                action = "Keep DAY limit"
-                conf = min(84, conf + 6)
-                reason = "Active ETF is close enough that disciplined limit execution is still realistic."
-            else:
-                action = "Do not chase"
-                conf = max(50, conf - 7)
-                reason = "Price remains far from the target; buying at market would weaken execution quality."
+def score_single_etf(etf: str, state: dict, market_context, vix_val: float) -> DeploymentWindow:
+    meta = ETF_META[etf]
+    distance = _distance_to_target(state)
+    conf = _base_confidence(market_context, vix_val)
+    window = f"{meta['primary_window']} · {meta['bahrain_window']}"
 
-        if etf == "VNGA80" and market_context.regime in ["Defensive", "Risk-Off"]:
-            suggested = "After US open: 16:30-18:00 Bahrain"
-            reason = "Equity-heavy ETF; defensive sessions often create better post-US-open entry windows."
-        elif etf == "V60A" and market_context.regime == "Neutral":
-            suggested = "European morning: 10:00-12:00 CET"
-            reason = "Balanced ETF; European morning pullbacks are usually cleaner than chasing later strength."
-        elif etf == "VWCE" and market_context.regime == "Risk-On":
-            suggested = "Wait for a pullback; reassess after US open"
-            reason = "Global equity ETF; strong risk-on days reduce the odds of attractive limit fills."
-        elif etf == "XEON":
-            action = "Deploy when cash allocation requires it"
-            reason = "Cash-like EUR ETF; intraday timing is usually less important than allocation discipline."
-            guardrail = "Check spread and avoid placing orders outside liquid market hours."
-        elif etf == "U03A":
-            action = "Deploy after FX/yield check"
-            reason = "USD T-bill ETF; price timing is less important, but EUR/USD exposure matters."
-            guardrail = "Check EUR/USD and LSE spread; avoid confusing ETF timing with FX timing."
+    if distance <= 0.20:
+        action = "DEPLOY IF TARGET TRADES"
+        conf = min(90, conf + 14)
+        reason = "Price is very close to the target. A DAY limit is statistically reasonable."
+    elif distance <= 0.75:
+        action = "KEEP DAY LIMIT"
+        conf = min(84, conf + 7)
+        reason = "The target is close enough to keep the order active without chasing."
+    else:
+        action = "WAIT — DO NOT CHASE"
+        conf = max(45, conf - 8)
+        reason = "The ETF is still above the target. Wait for the market to come to the limit."
 
-        rows.append(DeploymentWindow(etf, profile["role"], action, suggested, int(conf), reason, guardrail))
+    if etf == "VNGA80" and market_context.regime in ["Defensive", "Risk-Off"]:
+        window = "After US open · 16:30–18:00 Bahrain"
+        reason += " Equity-heavy funds often give cleaner entries during the US overlap."
+    elif etf == "VWCE" and market_context.regime == "Risk-On":
+        window = "Reassess after US open · 16:30–18:30 Bahrain"
+        reason += " Strong risk-on sessions reduce the odds of an attractive limit fill."
+    elif etf == "V60A" and market_context.regime == "Neutral":
+        window = "European morning · 10:00–12:00 CET"
+        reason += " Balanced funds often provide cleaner pricing in the European morning."
+
+    return DeploymentWindow(
+        etf=etf,
+        role=meta["role"],
+        action=action,
+        suggested_window=window,
+        confidence=int(conf),
+        reason=reason,
+        guardrail="Use IBKR live bid/ask before execution. Do not convert an estimated window into a market order.",
+    )
+
+
+def score_deployment_windows(active_asset: str, state: dict, market_context, vix_val: float) -> List[DeploymentWindow]:
+    rows: List[DeploymentWindow] = []
+    for etf in ETF_META.keys():
+        rows.append(score_single_etf(etf, state if etf == active_asset else state, market_context, vix_val))
     return rows
 
 

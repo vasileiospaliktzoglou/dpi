@@ -218,7 +218,6 @@ def build_memory_rows(active_asset: str, state: dict, context, windows: Iterable
         {"Setting": "Storage", "Value": "Excel workbook used internally as app memory"},
         {"Setting": "Workbook path", "Value": str(WORKBOOK_PATH)},
         {"Setting": "ETF universe", "Value": ", ".join(ETF_UNIVERSE)},
-        {"Setting": "Excluded ETFs", "Value": "XEON, U03A"},
     ])
 
     return {
