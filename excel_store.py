@@ -109,7 +109,12 @@ def _style_excel(writer: pd.ExcelWriter, dataframes: Dict[str, pd.DataFrame]) ->
         worksheet.autofilter(0, 0, len(df), max(0, len(df.columns) - 1))
         for col_num, col_name in enumerate(df.columns):
             worksheet.write(0, col_num, col_name, header_fmt)
-            sample = df[col_name].astype(str).head(200).tolist() + [str(col_name)]
+            col_data = df.loc[:, col_name]
+            if isinstance(col_data, pd.DataFrame):
+                raw_values = col_data.head(200).to_numpy().ravel().tolist()
+            else:
+                raw_values = col_data.head(200).tolist()
+            sample = [str(v) for v in raw_values] + [str(col_name)]
             width = min(max(max(len(v) for v in sample) + 2, 10), 44)
             name = str(col_name).lower()
             if any(k in name for k in ["summary", "reason", "guardrail", "explanation", "drivers", "risks", "text", "html", "notes"]):

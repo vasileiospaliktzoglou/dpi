@@ -1,31 +1,15 @@
-# EXECUTE v6.10.6 Mobile Pro
+# PALI EXECUTE v6.10.7 Mobile Chart Fix
 
-Professional single-ETF deployment dashboard for V60A, VNGA80 and VWCE.
+Fixes included:
+- Internal Excel memory `float has no len()` error fixed.
+- ETF selection moved into the main screen with a mobile-friendly selector.
+- Live ETF chart restored on the Today page.
+- Mobile layout improved.
+- Backtest labels rewritten in simple English: "target touch" instead of unclear "fill rate".
+- Only V60A, VNGA80 and VWCE are included. XEON/U03A remain removed.
 
-## What changed
-
-- Mobile-first professional UI.
-- One selected ETF is the main focus.
-- Other ETFs are hidden in a compact comparison expander.
-- Removed repeated Daily Intelligence / Deployment Plan blocks.
-- Removed cash ETF references from the app universe.
-- Internal Excel memory remains hidden in `data/PALI_EXECUTE_DATA.xlsx`.
-- Backtest page added for 1-day and 5-day limit-touch evidence.
-- Cleaner code structure with fewer repeated UI components.
-
-## Run
-
+Run:
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-
-## Pages
-
-1. **Today** — one ETF decision, best estimated deployment window, market explanation.
-2. **Backtest** — historical limit-touch evidence for the selected ETF.
-3. **Memory** — internal Excel memory status and recent stored records.
-
-## Important note
-
-The app estimates probability-based deployment windows. It does not predict exact prices or guarantee fills. Always confirm live bid/ask in IBKR before execution.

@@ -14,6 +14,7 @@ from market_context import classify_market_context
 from deployment_engine import score_deployment_windows, DeploymentWindow
 from email_report import build_daily_intelligence_email
 from excel_store import save_daily_intelligence, workbook_status, WORKBOOK_PATH
+from charts import render_chart
 
 st.set_page_config(page_title=f"{APP_TITLE} {APP_VERSION}", layout="wide", initial_sidebar_state="expanded")
 st.markdown(load_css(), unsafe_allow_html=True)
@@ -48,14 +49,42 @@ def badge_class(action: str) -> str:
     return "wait"
 
 
-def sidebar() -> tuple[str, str]:
+def sidebar() -> str:
     st.sidebar.markdown("### EXECUTE")
     page = st.sidebar.radio("Section", PAGES, label_visibility="collapsed")
-    active_etf = st.sidebar.selectbox("ETF focus", list(TICKERS.keys()), index=0)
     st.sidebar.markdown("---")
-    st.sidebar.caption("Single-ETF focus. Comparison is secondary to avoid duplicated information.")
-    st.sidebar.caption("Internal Excel memory remains hidden and is used for future validation.")
-    return page, active_etf
+    st.sidebar.caption("Focused on V60A, VNGA80 and VWCE only.")
+    st.sidebar.caption("Excel memory is internal and used to improve future recommendations.")
+    return page
+
+
+def etf_picker() -> str:
+    """Mobile-friendly ETF picker shown in the main page, not hidden in the sidebar."""
+    options = list(TICKERS.keys())
+    if "active_etf" not in st.session_state:
+        st.session_state["active_etf"] = options[0]
+    st.markdown("<div class='picker-label'>Choose ETF focus</div>", unsafe_allow_html=True)
+    try:
+        selected = st.segmented_control(
+            "Choose ETF focus",
+            options,
+            selection_mode="single",
+            default=st.session_state["active_etf"],
+            label_visibility="collapsed",
+        )
+    except Exception:
+        selected = st.radio(
+            "Choose ETF focus",
+            options,
+            index=options.index(st.session_state["active_etf"]),
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    active = selected or st.session_state["active_etf"]
+    st.session_state["active_etf"] = active
+    meta = ETF_META[active]
+    st.caption(f"{meta['name']} · {meta['role']}")
+    return active
 
 
 def topbar(active_etf: str) -> None:
@@ -144,8 +173,8 @@ def status_grid(state: dict, context, w: DeploymentWindow) -> None:
     stats5 = state.get("stats5", {})
     items = [
         ("Market regime", f"{context.regime}", f"{context.score}/100 · {context.tone}"),
-        ("1-day fill backtest", pct(stats1.get("fill_rate", 0)), f"{int(stats1.get('attempts', 0))} historical attempts"),
-        ("5-day fill backtest", pct(stats5.get("fill_rate", 0)), f"avg {float(stats5.get('avg_days_to_fill', 0) or 0):.1f} days to fill"),
+        ("Next-day target touch", pct(stats1.get("fill_rate", 0)), f"{int(stats1.get('fills', 0))}/{int(stats1.get('attempts', 0))} historical tests"),
+        ("Five-day target touch", pct(stats5.get("fill_rate", 0)), f"{int(stats5.get('fills', 0))}/{int(stats5.get('attempts', 0))} historical tests"),
     ]
     html = ''.join([f"<div class='mini-card'><div class='metric-label'>{a}</div><div class='metric-value'>{b}</div><div class='muted'>{c}</div></div>" for a,b,c in items])
     st.markdown(f"<div class='grid3'>{html}</div>", unsafe_allow_html=True)
@@ -188,10 +217,41 @@ def compact_comparison(active_etf: str, windows: Iterable[DeploymentWindow]) -> 
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+
+def live_chart_card(active_etf: str, state: dict) -> None:
+    st.markdown("""
+    <div class="card chart-card">
+      <div class="eyebrow">Live ETF chart</div>
+      <div class="section">Price, limit target and current level</div>
+      <p class="copy">This chart shows the selected ETF only. The green dashed line is the planned limit target; the current price marker shows where the ETF is trading now.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    render_chart(active_etf, target=state.get("target"), atr=state.get("atr"))
+
+
+def simple_backtest_explanation(stats1: dict, stats5: dict) -> None:
+    fills1 = int(stats1.get("fills", 0) or 0)
+    attempts1 = int(stats1.get("attempts", 0) or 0)
+    fills5 = int(stats5.get("fills", 0) or 0)
+    attempts5 = int(stats5.get("attempts", 0) or 0)
+    st.markdown(
+        f"""
+        <div class="card">
+          <div class="eyebrow">Plain English backtest meaning</div>
+          <div class="section">What do these numbers mean?</div>
+          <p class="copy"><b>Next-day target touch</b> means: in the historical test, the same type of limit order reached its price on the next trading day <b>{fills1}</b> times out of <b>{attempts1}</b> valid tests.</p>
+          <p class="copy"><b>Five-day target touch</b> means: if the same limit was kept open for up to five trading days, it reached the target <b>{fills5}</b> times out of <b>{attempts5}</b> valid tests.</p>
+          <div class="callout">Simple interpretation: a low next-day number does not mean the plan is bad. It means the target is selective. The five-day number shows whether patience improves the chance of execution.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def today_page(active_etf: str, data: dict) -> None:
     topbar(active_etf)
     decision_panel(active_etf, data["state"], data["context"], data["active_window"])
     status_grid(data["state"], data["context"], data["active_window"])
+    live_chart_card(active_etf, data["state"])
     market_story(data["context"], data["market_rows"])
     compact_comparison(active_etf, data["windows"])
     with st.expander("Email draft for this ETF", expanded=False):
@@ -209,18 +269,19 @@ def backtest_page(active_etf: str, data: dict) -> None:
         <div class="card">
           <div class="eyebrow">Backtest summary</div>
           <div class="section">Limit-touch evidence for {active_etf}</div>
-          <p class="copy">This test checks how often a limit order below the prior close would have been touched historically. It validates the execution rule; it is not a performance guarantee.</p>
+          <p class="copy">This test checks whether a disciplined limit price would have been reached in past market conditions. It is a reality check for the execution rule, not a promise that the future will behave the same way.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
     items = [
-        ("1-day fill rate", pct(stats1.get("fill_rate", 0)), f"{int(stats1.get('fills',0))}/{int(stats1.get('attempts',0))} fills"),
-        ("5-day fill rate", pct(stats5.get("fill_rate", 0)), f"{int(stats5.get('fills',0))}/{int(stats5.get('attempts',0))} fills"),
-        ("Average saving", pct(stats1.get("avg_saving", 0)), "on filled 1-day limit orders"),
+        ("Next-day target touch", pct(stats1.get("fill_rate", 0)), f"{int(stats1.get('fills',0))}/{int(stats1.get('attempts',0))} tests"),
+        ("Five-day target touch", pct(stats5.get("fill_rate", 0)), f"{int(stats5.get('fills',0))}/{int(stats5.get('attempts',0))} tests"),
+        ("Average price advantage", pct(stats1.get("avg_saving", 0)), "when next-day target was touched"),
     ]
     html = ''.join([f"<div class='mini-card'><div class='metric-label'>{a}</div><div class='metric-value'>{b}</div><div class='muted'>{c}</div></div>" for a,b,c in items])
     st.markdown(f"<div class='grid3'>{html}</div>", unsafe_allow_html=True)
+    simple_backtest_explanation(stats1, stats5)
 
     try:
         cal = compute_calendar_timing(state["df_clean"], multiplier=float(state.get("base_m", 1.0)))
@@ -263,7 +324,8 @@ def memory_page(active_etf: str) -> None:
 
 
 def main() -> None:
-    page, active_etf = sidebar()
+    page = sidebar()
+    active_etf = etf_picker()
     data = prepare_run(active_etf)
     if page == "Today":
         today_page(active_etf, data)
