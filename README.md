@@ -1,14 +1,22 @@
-# PALI EXECUTE v6.10.7 Mobile Chart Fix
+# PALI EXECUTE v6.10.8 Simplified Pro
 
-Fixes included:
-- Internal Excel memory `float has no len()` error fixed.
-- ETF selection moved into the main screen with a mobile-friendly selector.
-- Live ETF chart restored on the Today page.
-- Mobile layout improved.
-- Backtest labels rewritten in simple English: "target touch" instead of unclear "fill rate".
-- Only V60A, VNGA80 and VWCE are included. XEON/U03A remain removed.
+This release removes repeated ETF commentary and keeps the app focused on one clear workflow:
+
+1. One market summary for all tracked ETFs.
+2. One deployment plan table for V60A, VNGA80 and VWCE.
+3. One selected ETF decision card.
+4. One live chart for the selected ETF.
+5. Internal Excel memory only; no user-facing Excel download.
+
+Fixes:
+- Removed the duplicated chart story block.
+- Reduced repeated market/ETF explanations.
+- Fixed the internal Excel memory write path with safer cell sanitisation.
+- Reworded backtest metrics into simple English.
+- Keeps XEON and U03A excluded.
 
 Run:
+
 ```bash
 pip install -r requirements.txt
 streamlit run app.py

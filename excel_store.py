@@ -47,23 +47,52 @@ def _today_key() -> str:
     return date.today().isoformat()
 
 
+
+
+def _safe_cell(value: Any) -> Any:
+    """Return a value that Excel writers can handle reliably."""
+    try:
+        if value is None:
+            return ""
+        # Convert pandas/numpy missing values to blank cells.
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    if isinstance(value, (list, tuple, set)):
+        return " | ".join(str(v) for v in value)
+    if isinstance(value, dict):
+        return " | ".join(f"{k}: {v}" for k, v in value.items())
+    return value
+
+
+def _sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df
+    out = df.copy()
+    # Remove duplicate columns; these can appear after older workbook experiments.
+    out = out.loc[:, ~out.columns.duplicated()].copy()
+    for col in out.columns:
+        out[col] = out[col].map(_safe_cell)
+    return out
+
 def _read_sheet(sheet: str) -> pd.DataFrame:
     if not WORKBOOK_PATH.exists():
         return pd.DataFrame()
     try:
-        return pd.read_excel(WORKBOOK_PATH, sheet_name=sheet)
+        return _sanitize_df(pd.read_excel(WORKBOOK_PATH, sheet_name=sheet))
     except Exception:
         return pd.DataFrame()
 
 
 def _upsert(existing: pd.DataFrame, rows: List[Dict[str, Any]], key_cols: List[str]) -> pd.DataFrame:
-    incoming = pd.DataFrame(rows)
+    incoming = _sanitize_df(pd.DataFrame(rows))
     if incoming.empty:
         return existing
     if existing.empty:
         return incoming
 
-    existing = existing.copy()
+    existing = _sanitize_df(existing.copy())
     for col in incoming.columns:
         if col not in existing.columns:
             existing[col] = ""
@@ -254,10 +283,15 @@ def save_daily_intelligence(active_asset: str, state: dict, context, windows: It
         SHEETS["settings"]: new[SHEETS["settings"]],
     }
 
+    dataframes = {name: _sanitize_df(df) for name, df in dataframes.items()}
     with pd.ExcelWriter(WORKBOOK_PATH, engine="xlsxwriter") as writer:
         for sheet_name, df in dataframes.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
-        _style_excel(writer, dataframes)
+        try:
+            _style_excel(writer, dataframes)
+        except Exception:
+            # Styling must never break the internal memory write.
+            pass
 
     return WORKBOOK_PATH
 

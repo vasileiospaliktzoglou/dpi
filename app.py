@@ -11,7 +11,7 @@ from styles import load_css
 from helpers import fetch_live_quote, compute_calendar_timing
 from core import calculate_state, compute_market_sentiment
 from market_context import classify_market_context
-from deployment_engine import score_deployment_windows, DeploymentWindow
+from deployment_engine import score_single_etf, DeploymentWindow
 from email_report import build_daily_intelligence_email
 from excel_store import save_daily_intelligence, workbook_status, WORKBOOK_PATH
 from charts import render_chart
@@ -119,20 +119,30 @@ def load_market_rows() -> tuple[list[dict], float]:
 
 def prepare_run(active_etf: str) -> dict:
     market_rows, vix_value = load_market_rows()
-    state = calculate_state(active_etf, vix_value)
-    if not state:
-        st.error("Could not calculate ETF state. Check the market-data connection and ticker symbols.")
-        st.stop()
     sentiment = compute_market_sentiment(market_rows, vix_value)
     context = classify_market_context(market_rows, vix_value, sentiment)
-    windows = score_deployment_windows(active_etf, state, context, vix_value)
+
+    # Calculate each ETF once so the plan table is meaningful and not duplicated from the active ETF.
+    etf_states = {}
+    windows = []
+    for etf in TICKERS.keys():
+        etf_state = calculate_state(etf, vix_value)
+        if etf_state:
+            etf_states[etf] = etf_state
+            windows.append(score_single_etf(etf, etf_state, context, vix_value))
+
+    if active_etf not in etf_states:
+        st.error("Could not calculate ETF state. Check the market-data connection and ticker symbols.")
+        st.stop()
+
+    state = etf_states[active_etf]
     active_window = next(w for w in windows if w.etf == active_etf)
-    email = build_daily_intelligence_email(active_etf, state, context, [active_window])
+    email = build_daily_intelligence_email(active_etf, state, context, windows)
     try:
-        save_daily_intelligence(active_etf, state, context, [active_window], email)
+        save_daily_intelligence(active_etf, state, context, windows, email)
     except Exception as exc:
         st.warning(f"Internal memory could not be updated: {exc}")
-    return {"market_rows": market_rows, "vix": vix_value, "state": state, "sentiment": sentiment, "context": context, "windows": windows, "active_window": active_window, "email": email}
+    return {"market_rows": market_rows, "vix": vix_value, "state": state, "etf_states": etf_states, "sentiment": sentiment, "context": context, "windows": windows, "active_window": active_window, "email": email}
 
 
 def decision_panel(active_etf: str, state: dict, context, w: DeploymentWindow) -> None:
@@ -172,9 +182,9 @@ def status_grid(state: dict, context, w: DeploymentWindow) -> None:
     stats1 = state.get("stats1", {})
     stats5 = state.get("stats5", {})
     items = [
-        ("Market regime", f"{context.regime}", f"{context.score}/100 · {context.tone}"),
-        ("Next-day target touch", pct(stats1.get("fill_rate", 0)), f"{int(stats1.get('fills', 0))}/{int(stats1.get('attempts', 0))} historical tests"),
-        ("Five-day target touch", pct(stats5.get("fill_rate", 0)), f"{int(stats5.get('fills', 0))}/{int(stats5.get('attempts', 0))} historical tests"),
+        ("Market mood", f"{context.regime}", f"{context.score}/100 · {context.tone}"),
+        ("Chance target is touched tomorrow", pct(stats1.get("fill_rate", 0)), "Based on similar historical limit targets"),
+        ("Chance target is touched within 5 days", pct(stats5.get("fill_rate", 0)), "Shows the value of patience before chasing"),
     ]
     html = ''.join([f"<div class='mini-card'><div class='metric-label'>{a}</div><div class='metric-value'>{b}</div><div class='muted'>{c}</div></div>" for a,b,c in items])
     st.markdown(f"<div class='grid3'>{html}</div>", unsafe_allow_html=True)
@@ -210,22 +220,28 @@ def market_story(context, market_rows: list[dict]) -> None:
 
 
 def compact_comparison(active_etf: str, windows: Iterable[DeploymentWindow]) -> None:
-    with st.expander("Compact comparison with other tracked ETFs", expanded=False):
-        rows = []
-        for w in windows:
-            rows.append({"ETF": w.etf, "Focus": "Selected" if w.etf == active_etf else "Secondary", "Action": w.action, "Window": w.suggested_window, "Confidence": w.confidence})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.markdown("<div class='section-spacer'></div>", unsafe_allow_html=True)
+    st.markdown("### Deployment plan")
+    st.caption("One simple plan for all tracked ETFs. The selected ETF is shown first; the others stay compact.")
+    rows = []
+    for w in windows:
+        rows.append({
+            "ETF": w.etf,
+            "Role": w.role,
+            "Action": w.action.replace("—", "-"),
+            "Best estimated window": w.suggested_window,
+            "Confidence": f"{w.confidence}/100",
+        })
+    df = pd.DataFrame(rows)
+    df["_sort"] = df["ETF"].apply(lambda x: 0 if x == active_etf else 1)
+    df = df.sort_values(["_sort", "ETF"]).drop(columns=["_sort"])
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 
 def live_chart_card(active_etf: str, state: dict) -> None:
-    st.markdown("""
-    <div class="card chart-card">
-      <div class="eyebrow">Live ETF chart</div>
-      <div class="section">Price, limit target and current level</div>
-      <p class="copy">This chart shows the selected ETF only. The green dashed line is the planned limit target; the current price marker shows where the ETF is trading now.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### Live chart")
+    st.caption("Selected ETF only. No repeated ETF commentary below the chart.")
     render_chart(active_etf, target=state.get("target"), atr=state.get("atr"))
 
 
@@ -249,12 +265,12 @@ def simple_backtest_explanation(stats1: dict, stats5: dict) -> None:
 
 def today_page(active_etf: str, data: dict) -> None:
     topbar(active_etf)
+    market_story(data["context"], data["market_rows"])
+    compact_comparison(active_etf, data["windows"])
     decision_panel(active_etf, data["state"], data["context"], data["active_window"])
     status_grid(data["state"], data["context"], data["active_window"])
     live_chart_card(active_etf, data["state"])
-    market_story(data["context"], data["market_rows"])
-    compact_comparison(active_etf, data["windows"])
-    with st.expander("Email draft for this ETF", expanded=False):
+    with st.expander("Email draft", expanded=False):
         st.text_area("Subject", data["email"]["subject"], height=70)
         st.text_area("Body", data["email"]["text"], height=300)
 

@@ -38,6 +38,6 @@ BENCHMARKS = {
 }
 
 APP_TITLE = "EXECUTE"
-APP_VERSION = "6.10.7-mobile-chart-fix"
+APP_VERSION = "6.10.8-simplified-pro"
 DEFAULT_ETF = "V60A"
 ORDER_SIZE_EUR = 20000

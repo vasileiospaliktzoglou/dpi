@@ -355,43 +355,15 @@ def render_chart(asset, target=None, atr=None, *args, **kwargs):
 
     latest = _safe_float(chart_df["Close"].iloc[-1])
     first = _safe_float(chart_df["Close"].iloc[0])
-    open_price = _safe_float(chart_df["Open"].iloc[0]) if "Open" in chart_df.columns else np.nan
     high_price = _safe_float(chart_df["High"].max()) if "High" in chart_df.columns else np.nan
     low_price = _safe_float(chart_df["Low"].min()) if "Low" in chart_df.columns else np.nan
     period_change = ((latest / first) - 1) * 100 if first and not np.isnan(first) else 0.0
 
-    target_val = _safe_float(target, latest)
-    status = _target_status(latest, low_price, target_val, atr)
+    # Keep the chart explanation compact. The app-level summary explains market context once.
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Latest", f"EUR {latest:.2f}" if not np.isnan(latest) else "n/a")
+    c2.metric("Low", f"EUR {low_price:.2f}" if not np.isnan(low_price) else "n/a")
+    c3.metric("High", f"EUR {high_price:.2f}" if not np.isnan(high_price) else "n/a")
+    c4.metric(f"{tf} move", f"{period_change:.2f}%")
 
-    # Compact meaning metrics, not a separate dashboard competing with the graph.
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Open", f"EUR {open_price:.2f}" if not np.isnan(open_price) else "n/a")
-    c2.metric("High", f"EUR {high_price:.2f}" if not np.isnan(high_price) else "n/a")
-    c3.metric("Low", f"EUR {low_price:.2f}" if not np.isnan(low_price) else "n/a")
-    c4.metric("Latest", f"EUR {latest:.2f}" if not np.isnan(latest) else "n/a")
-    c5.metric(f"{tf} move", f"{period_change:.2f}%")
-
-    if not np.isnan(target_val) and latest > target_val:
-        progress = max(0, min(100, 100 - (status["distance_pct"] / 1.5) * 100))
-    else:
-        progress = 100.0
-
-    atr_text = "n/a" if np.isnan(status["atr_distance"]) else f"{status['atr_distance']:.2f}x ATR"
-    low_text = "already touched" if status["low_distance"] <= 0 else f"EUR {status['low_distance']:.2f} away"
-
-    st.markdown(
-        f"""
-        <div class="chart-story-card">
-            <div class="chart-story-title">Chart story: {status['status']}</div>
-            <div class="chart-progress-bg"><div class="chart-progress-fill" style="width:{progress:.0f}%"></div></div>
-            <div class="chart-story-text">
-                {status['plain']}<br>
-                <b>Latest to target:</b> EUR {status['distance']:.2f} ({status['distance_pct']:.2f}%).
-                <b>Today’s low vs target:</b> {low_text}.
-                <b>ATR distance:</b> {atr_text}.
-            </div>
-            <div class="small-muted">Green/red line = price above/below the period reference. Dotted reference line = starting price for this view. Dashed green line = your limit target. Confirm final bid/ask in IBKR.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.caption("Chart guide: dashed green line = limit target; dark line = current price; dotted line = starting price for this view. Confirm final bid/ask in IBKR before execution.")
