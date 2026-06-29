@@ -19,7 +19,7 @@ BENCHMARKS = {
 }
 
 APP_TITLE = "EXECUTE"
-APP_VERSION = "6.10.2-excel-ui"
+APP_VERSION = "6.10.4-ux-consolidation"
 
 DEFAULT_ETF = "V60A"
 DEFAULT_PAGE = "Dashboard"
