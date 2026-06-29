@@ -585,7 +585,7 @@ def render_etf_matrix(vix_val):
 
 def render_market_intelligence(market_rows):
     st.markdown("### Market Intelligence")
-    st.write("Raw numbers are not enough. This page explains what each market signal means for ETF execution.")
+    st.write("Raw numbers are not enough. This screen translates market signals into practical ETF execution context.")
 
     cols = st.columns(3)
     for i, row in enumerate(market_rows):
@@ -908,73 +908,144 @@ def render_end_of_day_page(active_asset, state, sentiment, vix_val, market_rows)
 
 
 def render_daily_intelligence_page(active_asset, state, sentiment, vix_val, market_rows):
-    """v6.10 Investment Intelligence panel: market explanation + deployment windows + email draft."""
+    """v6.10.3 Investment Intelligence panel: cleaner UI + internal Excel memory."""
     from market_context import classify_market_context
     from deployment_engine import score_deployment_windows, windows_as_dicts
     from email_report import build_daily_intelligence_email
+    from excel_store import save_daily_intelligence, workbook_status
 
     context = classify_market_context(market_rows, vix_val, sentiment)
     windows = score_deployment_windows(active_asset, state, context, vix_val)
     window_rows = windows_as_dicts(windows)
     active_window = next((w for w in windows if w.etf == active_asset), windows[0])
 
-    st.markdown("### Investment Intelligence Panel")
-    st.write("This page explains what is happening in the market and converts it into estimated deployment windows for each ETF. These are probability-based windows, not exact price predictions.")
+    regime_class = "intel-neutral"
+    if context.regime in ["Risk-On"]:
+        regime_class = "intel-good"
+    elif context.regime in ["Defensive", "Risk-Off"]:
+        regime_class = "intel-warn"
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Market regime", context.regime, f"{context.score}/100")
-    c2.metric("Active ETF", active_asset)
-    c3.metric("Best window", active_window.suggested_window)
-    c4.metric("Confidence", f"{active_window.confidence}/100")
+    live_price = float(state.get("live_price", state.get("spot", 0)) or 0)
+    target = float(state.get("target", 0) or 0)
+    distance_pct = ((live_price - target) / target * 100) if target else 0
+    distance_label = "inside target zone" if distance_pct <= 0.20 else "near target" if distance_pct <= 0.75 else "above target zone"
 
-    st.markdown("#### What is happening in the market")
-    st.info(context.explanation)
+    st.markdown(f"""
+    <div class="intel-hero clean-hero">
+        <div>
+            <div class="intel-kicker">Daily Intelligence</div>
+            <div class="intel-title">ETF deployment command centre</div>
+            <div class="intel-subtitle">A cleaner planning screen for V60A, VNGA80 and VWCE. It translates market conditions into practical deployment windows while keeping the rule simple: wait for the target and do not chase.</div>
+        </div>
+        <div class="intel-pill">{context.regime} · {context.score}/100</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="intel-summary-panel">
+        <div class="intel-summary-left">
+            <div class="intel-section-label">Current read</div>
+            <div class="intel-summary-title">{context.regime}</div>
+            <div class="intel-summary-text">{context.explanation}</div>
+        </div>
+        <div class="intel-summary-right">
+            <div class="intel-mini-stat {regime_class}"><span>Regime score</span><b>{context.score}/100</b></div>
+            <div class="intel-mini-stat"><span>Active ETF</span><b>{active_asset}</b></div>
+            <div class="intel-mini-stat"><span>Target distance</span><b>{distance_pct:.2f}%</b><em>{distance_label}</em></div>
+            <div class="intel-mini-stat intel-primary"><span>Confidence</span><b>{active_window.confidence}/100</b></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("#### Recommended window")
+    st.markdown(f"""
+    <div class="window-card">
+        <div class="window-main">
+            <div class="window-label">{active_asset}</div>
+            <div class="window-title">{active_window.action}</div>
+            <div class="window-time">{active_window.suggested_window}</div>
+            <div class="window-reason">{active_window.reason}</div>
+        </div>
+        <div class="window-side">
+            <div class="window-score">{active_window.confidence}</div>
+            <div class="window-score-label">confidence</div>
+            <div class="small-muted">{active_window.guardrail}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     left, right = st.columns(2)
     with left:
-        st.markdown("#### Key drivers")
-        for item in context.drivers:
-            st.markdown(f"- {item}")
+        st.markdown("#### Market drivers")
+        driver_html = "".join([f"<div class='intel-list-item'><span>✓</span>{item}</div>" for item in context.drivers])
+        st.markdown(f"<div class='intel-list clean-list'>{driver_html}</div>", unsafe_allow_html=True)
     with right:
-        st.markdown("#### Risks / guardrails")
-        for item in context.risks:
-            st.markdown(f"- {item}")
+        st.markdown("#### Risks and guardrails")
+        risk_html = "".join([f"<div class='intel-list-item'><span>!</span>{item}</div>" for item in context.risks])
+        st.markdown(f"<div class='intel-list clean-list'>{risk_html}</div>", unsafe_allow_html=True)
 
-    st.markdown("#### Best estimated deployment date/time windows")
-    st.caption("The logic uses current regime, ETF profile, volatility, target distance and your DCA discipline. XEON and U03A intentionally avoid false precision because timing is less important for cash-like instruments.")
+    st.markdown("#### Deployment plan")
     df = pd.DataFrame(window_rows)
     df = df[["etf", "role", "action", "suggested_window", "confidence", "reason", "guardrail"]]
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    df = df.rename(columns={
+        "etf": "ETF",
+        "role": "Role",
+        "action": "Action",
+        "suggested_window": "Best estimated window",
+        "confidence": "Confidence",
+        "reason": "Reason",
+        "guardrail": "Guardrail",
+    })
+    st.dataframe(df, use_container_width=True, hide_index=True, height=210)
 
-    st.markdown("#### Tomorrow's concise plan")
+    st.markdown("#### Tomorrow's instruction")
     st.markdown(f"""
-    <div class="command-card">
-        <div class="command-label">Recommended behaviour</div>
+    <div class="command-card intel-command clean-command">
+        <div class="command-label">Execution behaviour</div>
         <div class="command-action">{active_window.action}</div>
+        <div class="command-text"><b>ETF:</b> {active_asset}</div>
         <div class="command-text"><b>Window:</b> {active_window.suggested_window}</div>
         <div class="command-text"><b>Reason:</b> {active_window.reason}</div>
-        <div class="code-strip">BUY {active_asset} IBIS LMT {float(state.get('target', 0)):.2f} DAY</div>
+        <div class="code-strip">BUY {active_asset} IBIS LMT {target:.2f} DAY</div>
         <div class="small-muted">Guardrail: {active_window.guardrail}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("#### Email draft")
     email = build_daily_intelligence_email(active_asset, state, context, windows)
+
+    # Internal memory save: the Excel workbook is not exposed as a download.
+    # It is the app's local knowledge base for future recommendation accuracy.
+    saved_path = save_daily_intelligence(active_asset, state, context, windows, email)
+    status = workbook_status()
+
+    st.markdown("#### Internal memory")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f"<div class='storage-card'><div class='storage-label'>Status</div><div class='storage-value'>{'Updated' if status['exists'] else 'Pending'}</div></div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"<div class='storage-card'><div class='storage-label'>Workbook</div><div class='storage-value'>{status['size_kb']} KB</div></div>", unsafe_allow_html=True)
+    with c3:
+        st.markdown("<div class='storage-card'><div class='storage-label'>Mode</div><div class='storage-value'>Private app data</div></div>", unsafe_allow_html=True)
+    st.caption(f"Saved internally to {saved_path}. This file is used by the app for historical learning and future deployment estimates; it is not a user-facing report download.")
+
+    st.markdown("#### Email draft")
     st.text_input("Subject", value=email["subject"])
-    st.text_area("Plain text email", value=email["text"], height=360)
+    st.text_area("Plain text email", value=email["text"], height=320)
 
-    st.download_button(
-        "Download email as HTML",
-        email["html"].encode("utf-8"),
-        file_name="pali_execute_daily_intelligence_email.html",
-        mime="text/html",
-    )
-    st.download_button(
-        "Download email as TXT",
-        email["text"].encode("utf-8"),
-        file_name="pali_execute_daily_intelligence_email.txt",
-        mime="text/plain",
-    )
-
-    st.markdown("#### Design note")
-    st.caption("Next step after this version: connect SMTP/Gmail and schedule this page to run automatically after Xetra close.")
+    a, b = st.columns(2)
+    with a:
+        st.download_button(
+            "Download email as HTML",
+            email["html"].encode("utf-8"),
+            file_name="execute_daily_intelligence_email.html",
+            mime="text/html",
+            use_container_width=True,
+        )
+    with b:
+        st.download_button(
+            "Download email as TXT",
+            email["text"].encode("utf-8"),
+            file_name="execute_daily_intelligence_email.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )

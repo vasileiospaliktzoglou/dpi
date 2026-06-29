@@ -1,7 +1,7 @@
 """
-PALI Execute v6.10 - Deployment Window Engine
+EXECUTE v6.10 - Deployment Window Engine
 
-Scores next-session deployment windows for each ETF using transparent rules.
+Scores next-session deployment windows for growth ETFs using transparent rules.
 It recommends windows, not exact predictions.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ ETF_PROFILES = {
         "role": "Core balanced 60/40 accumulator",
         "best_window": "10:00-12:00 CET / 11:00-13:00 Bahrain",
         "secondary_window": "16:30-18:00 Bahrain",
-        "sensitivity": "Medium equity + bond sensitivity",
+        "sensitivity": "Medium equity and bond sensitivity",
     },
     "VNGA80": {
         "role": "Core growth 80/20 accumulator",
@@ -26,20 +26,8 @@ ETF_PROFILES = {
     "VWCE": {
         "role": "Global equity accumulator",
         "best_window": "16:30-18:30 Bahrain",
-        "secondary_window": "Friday afternoon if no major event risk",
-        "sensitivity": "Very high equity + USD exposure",
-    },
-    "XEON": {
-        "role": "EUR cash-like parking vehicle",
-        "best_window": "Any liquid market hour",
-        "secondary_window": "Avoid only very wide spreads",
-        "sensitivity": "Very low price timing sensitivity",
-    },
-    "U03A": {
-        "role": "USD Treasury bill parking vehicle",
-        "best_window": "Any liquid LSE hour; check FX first",
-        "secondary_window": "After EUR/USD review",
-        "sensitivity": "Low duration risk, medium FX relevance",
+        "secondary_window": "Friday afternoon if event risk is low",
+        "sensitivity": "Very high global equity and USD exposure",
     },
 }
 
@@ -56,8 +44,6 @@ class DeploymentWindow:
 
 
 def _base_confidence(etf: str, market_context, vix_val: float) -> int:
-    if etf in ["XEON", "U03A"]:
-        return 92 if vix_val < 25 else 85
     if market_context.regime == "Risk-On":
         return 58
     if market_context.regime == "Neutral":
@@ -68,7 +54,7 @@ def _base_confidence(etf: str, market_context, vix_val: float) -> int:
 
 
 def score_deployment_windows(active_asset: str, state: dict, market_context, vix_val: float) -> List[DeploymentWindow]:
-    """Return deployment guidance for all tracked ETFs."""
+    """Return deployment guidance for all tracked growth ETFs."""
     rows: List[DeploymentWindow] = []
     active_target_distance = 999.0
     try:
@@ -82,7 +68,7 @@ def score_deployment_windows(active_asset: str, state: dict, market_context, vix
         conf = _base_confidence(etf, market_context, vix_val)
         suggested = profile["best_window"]
         action = "Wait for target zone"
-        guardrail = "Confirm live bid/ask spread before placing an order."
+        guardrail = "Confirm live bid/ask spread before placing the order. Do not chase a green candle."
         reason = f"{profile['sensitivity']}; {market_context.tomorrow_bias}"
 
         if etf == active_asset:
@@ -108,14 +94,6 @@ def score_deployment_windows(active_asset: str, state: dict, market_context, vix
         elif etf == "VWCE" and market_context.regime == "Risk-On":
             suggested = "Wait for a pullback; reassess after US open"
             reason = "Global equity ETF; strong risk-on days reduce the odds of attractive limit fills."
-        elif etf == "XEON":
-            action = "Deploy when cash allocation requires it"
-            reason = "Cash-like EUR ETF; intraday timing is usually less important than allocation discipline."
-            guardrail = "Check spread and avoid placing orders outside liquid market hours."
-        elif etf == "U03A":
-            action = "Deploy after FX/yield check"
-            reason = "USD T-bill ETF; price timing is less important, but EUR/USD exposure matters."
-            guardrail = "Check EUR/USD and LSE spread; avoid confusing ETF timing with FX timing."
 
         rows.append(DeploymentWindow(etf, profile["role"], action, suggested, int(conf), reason, guardrail))
     return rows

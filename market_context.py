@@ -1,5 +1,5 @@
 """
-PALI Execute v6.10 - Market Context Engine
+EXECUTE v6.10 - Market Context Engine
 
 Rule-based market explanation for daily investment intelligence.
 This does not predict markets. It converts current benchmark moves into a concise,
@@ -77,7 +77,7 @@ def classify_market_context(market_rows: List[dict], vix_val: float, sentiment: 
     # Currency and defensive signals
     if abs(eurusd) > 0.35:
         direction = "stronger" if eurusd > 0 else "weaker"
-        drivers.append(f"EUR/USD is moving {direction}, which matters for your USD-heavy global equity exposure and U03A.")
+        drivers.append(f"EUR/USD is moving {direction}, which matters for EUR-based deployment into USD-heavy global equity ETFs.")
     if gold > 0.7:
         risks.append("Gold is bid, suggesting some defensive or geopolitical demand.")
     if brent > 1.2:
