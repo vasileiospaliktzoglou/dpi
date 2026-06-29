@@ -1,29 +1,13 @@
-# DPI v1.0
+# PALI Execute v7.0 Pro UI
 
-Clean Streamlit Cloud-safe version.
+Professional dashboard refinement:
+- central isolated chart reading surface
+- Google Finance style green/red line
+- clean volume strip
+- current/reference/DAY limit lines only
+- chart story with target progress and ATR distance
+- actual optional auto-refresh via streamlit-autorefresh
+- execution command separated below chart
+- plain-English decision support sections
 
-## Files
-
-- app.py
-- requirements.txt
-- README.md
-- .streamlit/config.toml
-
-## Run locally
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Streamlit Cloud
-
-Main file path:
-
-```text
-app.py
-```
-
-## Notes
-
-This version deliberately uses a single `app.py` and avoids `st.slider` because earlier deployments failed due to module imports and Streamlit frontend slider loading issues.
+Deploy all files together. If using Streamlit Cloud, commit the full folder contents to repo root and reboot the app.
