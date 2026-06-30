@@ -1,43 +1,41 @@
-TICKERS = {
-    "V60A": "V60A.DE",
-    "VNGA80": "VNGA80.MI",
-    "VWCE": "VWCE.DE",
-}
+APP_TITLE = "PALI EXECUTE"
+APP_VERSION = "v7.0 Clean Decision"
 
-ETF_META = {
+ETFS = {
     "V60A": {
-        "name": "Vanguard LifeStrategy 60",
-        "role": "Core balanced allocation",
-        "amount": 20000,
-        "primary_window": "10:00–12:00 CET",
-        "bahrain_window": "12:00–14:00 Bahrain",
+        "name": "Vanguard LifeStrategy 60% Equity UCITS ETF",
+        "ticker": "V60A.DE",
+        "role": "Core balanced ETF",
+        "risk": "Medium",
+        "default_target_offset_atr": 0.80,
+        "planned_amount_eur": 20000,
     },
     "VNGA80": {
-        "name": "Vanguard LifeStrategy 80",
-        "role": "Core growth allocation",
-        "amount": 10000,
-        "primary_window": "After US open",
-        "bahrain_window": "16:30–18:00 Bahrain",
+        "name": "Vanguard LifeStrategy 80% Equity UCITS ETF",
+        "ticker": "VNGA80.MI",
+        "role": "Growth core ETF",
+        "risk": "Medium-high",
+        "default_target_offset_atr": 1.00,
+        "planned_amount_eur": 10000,
     },
     "VWCE": {
-        "name": "Vanguard FTSE All-World",
-        "role": "Global equity allocation",
-        "amount": 10000,
-        "primary_window": "US overlap",
-        "bahrain_window": "16:30–18:30 Bahrain",
+        "name": "Vanguard FTSE All-World UCITS ETF",
+        "ticker": "VWCE.DE",
+        "role": "Global equity ETF",
+        "risk": "High",
+        "default_target_offset_atr": 1.10,
+        "planned_amount_eur": 10000,
     },
 }
 
-BENCHMARKS = {
-    "S&P": "^GSPC",
-    "NASDAQ": "^IXIC",
-    "DAX": "^GDAXI",
-    "VIX": "^VIX",
-    "EURUSD": "EURUSD=X",
-    "US10Y": "^TNX",
+MARKET_TICKERS = {
+    "Global stocks": "URTH",
+    "S&P 500": "SPY",
+    "Europe stocks": "VGK",
+    "US bonds": "IEF",
+    "Volatility": "^VIX",
+    "EUR/USD": "EURUSD=X",
 }
 
-APP_TITLE = "EXECUTE"
-APP_VERSION = "6.10.8-simplified-pro"
-DEFAULT_ETF = "V60A"
-ORDER_SIZE_EUR = 20000
+DATA_DIR = "data"
+MEMORY_FILE = "data/PALI_EXECUTE_MEMORY.xlsx"
