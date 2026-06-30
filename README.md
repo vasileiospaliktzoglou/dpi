@@ -1,18 +1,18 @@
-# PALI EXECUTE v7.0 Clean Decision
+# PALI EXECUTE v7.1 Professional UX
 
-Professional Streamlit redesign focused on clarity instead of more widgets.
+A cleaner decision-first Streamlit app for V60A, VNGA80 and VWCE.
 
-## What changed
+## What changed in v7.1
 
-- One market summary for all ETFs.
-- No XEON or U03A anywhere.
-- No repeated chart story blocks.
-- Mobile-first layout with large decision hierarchy.
-- Easier ETF selector on the main page.
-- Restored live ETF charts using yfinance, with offline fallback demo data.
-- Internal Excel memory only: `data/PALI_EXECUTE_MEMORY.xlsx`.
-- Fixed Excel memory type handling so floats do not trigger `len()` errors.
-- Plain-English explanation of target-touch statistics.
+- Removed the visible internal Excel-memory debug message.
+- Hid the unnecessary Streamlit white header/top strip.
+- Removed repeated market explanations across ETF cards.
+- Kept one global market summary for all ETFs.
+- Improved ETF selection with a clearer inspect flow.
+- Restored ETF live charts with target line.
+- Added a mobile-first layout with stacked cards.
+- Made historical target-touch wording simpler.
+- Made Excel memory more defensive: if the workbook is corrupted, it is backed up and recreated.
 
 ## Run
 
@@ -21,14 +21,12 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Main pages
+## Internal memory
 
-- Dashboard: what to do today.
-- ETF Detail: one ETF at a time.
-- Analytics: compact comparison and historical target-touch explanation.
-- Memory: confirms the hidden Excel memory location.
+The app writes internally to:
 
-## Important
+```text
+data/PALI_EXECUTE_MEMORY.xlsx
+```
 
-This is an execution decision-support tool. It does not predict tomorrow's close and does not place orders.
-Always confirm the live bid/ask in IBKR before acting.
+This file is not shown in the UI. It is used as the app's internal learning/memory layer.

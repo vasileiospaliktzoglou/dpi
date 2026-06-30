@@ -1,5 +1,5 @@
 APP_TITLE = "PALI EXECUTE"
-APP_VERSION = "v7.0 Clean Decision"
+APP_VERSION = "v7.1 Professional UX"
 
 ETFS = {
     "V60A": {
@@ -39,3 +39,5 @@ MARKET_TICKERS = {
 
 DATA_DIR = "data"
 MEMORY_FILE = "data/PALI_EXECUTE_MEMORY.xlsx"
+LOG_DIR = "logs"
+LOG_FILE = "logs/app.log"

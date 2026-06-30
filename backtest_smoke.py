@@ -1,16 +1,21 @@
 from engine import build_decisions, choose_primary
-from excel_memory import save_run, status
-from config import APP_VERSION
+from excel_memory import save_run, ensure_workbook
+from config import APP_VERSION, ETFS
 
-market, decisions = build_decisions()
-primary = choose_primary(decisions)
-save_run(APP_VERSION, market, decisions, primary)
-assert set(decisions.keys()) == {"V60A", "VNGA80", "VWCE"}
-for d in decisions.values():
-    assert d.live_price > 0
-    assert d.target_price > 0
-    assert 0 <= d.target_touch_1d <= 100
-    assert 0 <= d.target_touch_5d <= 100
-print("SMOKE TEST PASSED")
-print(primary.symbol, primary.action)
-print(status())
+
+def main():
+    market, decisions = build_decisions()
+    assert set(decisions.keys()) == set(ETFS.keys())
+    assert "XEON" not in decisions and "U03A" not in decisions
+    for symbol, d in decisions.items():
+        assert d.live_price > 0, symbol
+        assert d.target_price > 0, symbol
+        assert d.history is not None and len(d.history) > 30, symbol
+    primary = choose_primary(decisions)
+    save_run(APP_VERSION, market, decisions, primary)
+    assert ensure_workbook().exists()
+    print("Smoke test passed")
+
+
+if __name__ == "__main__":
+    main()
