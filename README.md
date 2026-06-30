@@ -1,31 +1,23 @@
-# PALI EXECUTE v7.2 Mobile Dynamic
+# PALI EXECUTE v7.2.2 UI Polish
 
-Decision-first Streamlit app for V60A, VNGA80 and VWCE.
+Streamlit version based on v7.2, with focused UI fixes only.
 
-## What changed in v7.2
-
-- Reworked mobile layout so cards stack cleanly and text does not overflow.
-- Removed visible version/debug text from the main interface.
-- Made data dynamic with a refresh button and 15-minute cache.
-- Uses 5-year price history for ETF decision statistics when live data is available.
-- Replaced simplistic line chart with candlestick chart, 20/50-day averages, target line, buy zone and volume.
-- Replaced confusing market-input block with Today’s Markets: real price + daily % move.
-- Added chart range selector: 1M, 3M, 6M, 1Y, 3Y.
-- Keeps Excel memory internal and silent.
+## Changes
+- Preserved the v7.2 layout and detailed charts.
+- Added automatic 60-second refresh.
+- Removed the manual refresh button.
+- Improved mobile spacing and card wrapping.
+- Changed the palette to softer navy/slate tones instead of harsh black/white contrast.
+- Kept ETF scope to V60A, VNGA80, and VWCE only.
+- Kept Excel memory hidden/internal.
+- Added live quote attempt via yfinance `fast_info`; charts still use 5-year OHLC history.
 
 ## Run
-
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Internal memory
+The internal memory workbook is created automatically at:
 
-The app writes internally to:
-
-```text
-data/PALI_EXECUTE_MEMORY.xlsx
-```
-
-It is not shown in the UI. Errors go to `logs/app.log`.
+`data/PALI_EXECUTE_MEMORY.xlsx`

@@ -117,9 +117,12 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
     meta = ETFS[symbol]
     bundle = fetch_history(meta["ticker"], "5y", refresh_key)
     df = bundle.history.copy()
-    live = float(df["Close"].iloc[-1])
-    previous = float(df["Close"].iloc[-2]) if len(df) > 1 else live
-    day_change_pct = ((live / previous) - 1) * 100 if previous else 0.0
+    previous = float(df["Close"].iloc[-2]) if len(df) > 1 else float(df["Close"].iloc[-1])
+    quote = latest_quote(meta["ticker"], refresh_key)
+    live = float(quote.get("price", df["Close"].iloc[-1]))
+    day_change_pct = float(quote.get("change_pct", ((live / previous) - 1) * 100 if previous else 0.0))
+    fetched_at = str(quote.get("fetched_at") or bundle.fetched_at)
+    data_source = str(quote.get("source") or bundle.source)
     current_atr = atr(df)
     current_rsi = rsi(df)
     trend = moving_trend(df)
@@ -162,7 +165,7 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
         symbol, meta["name"], meta["role"], meta["ticker"], action, plain, live, previous,
         day_change_pct, target, gap, gap_pct, current_atr, current_rsi, trend,
         r1, r5, c1, c5, n1, n5, confidence_label, confidence_score, window,
-        reason, guardrail, df, bundle.source, bundle.fetched_at, estimated_saving,
+        reason, guardrail, df, data_source, fetched_at, estimated_saving,
     )
 
 

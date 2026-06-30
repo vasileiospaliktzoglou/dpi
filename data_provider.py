@@ -73,6 +73,32 @@ def fetch_history(ticker: str, period: str = "5y", refresh_key: int = 0) -> Pric
 
 
 def latest_quote(ticker: str, refresh_key: int = 0) -> Dict[str, float | str]:
+    """Return the freshest available quote.
+
+    The daily chart still uses 5-year OHLC data, but this function first tries
+    yfinance fast_info so the dashboard price can update more often. If that
+    fails, it falls back to the latest daily close.
+    """
+    fetched = dt.datetime.now().strftime("%d %b %Y %H:%M")
+    if yf is not None:
+        try:
+            info = yf.Ticker(ticker).fast_info
+            price = info.get("last_price") or info.get("lastPrice")
+            prev = info.get("previous_close") or info.get("previousClose")
+            if price is not None and prev is not None and float(prev) > 0:
+                price_f = float(price)
+                prev_f = float(prev)
+                return {
+                    "ticker": ticker,
+                    "price": price_f,
+                    "change_pct": ((price_f / prev_f) - 1) * 100,
+                    "source": "live/yfinance quote",
+                    "date": fetched,
+                    "fetched_at": fetched,
+                }
+        except Exception:
+            pass
+
     bundle = fetch_history(ticker, "6mo", refresh_key)
     df = bundle.history
     last = df.iloc[-1]
