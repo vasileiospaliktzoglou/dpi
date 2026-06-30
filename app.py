@@ -37,6 +37,56 @@ def change_class(x: float) -> str:
     return "positive" if x >= 0 else "negative"
 
 
+
+def component_theme() -> str:
+    return """
+    <style>
+      :root {
+        --panel:#152033; --panel2:#1A2740; --text:#E6EDF7; --text2:#D7E0EE;
+        --muted:#9FB0C7; --line:rgba(159,176,199,.20); --good:#3DDC84;
+        --warn:#F4B740; --bad:#F87171; --blue:#A6CCFF;
+      }
+      html, body { margin:0; padding:0; background:transparent; color:var(--text);
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      }
+      * { box-sizing:border-box; overflow-wrap:anywhere; }
+      .card { background:rgba(21,32,51,.94); border:1px solid var(--line); border-radius:22px;
+        padding:18px; box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0;
+      }
+      .cards { display:grid; grid-template-columns:repeat(3,minmax(245px,1fr)); gap:14px; }
+      .row { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; min-width:0; }
+      .row > * { min-width:0; }
+      .eyebrow { color:var(--blue); text-transform:uppercase; letter-spacing:.14em; font-size:11px;
+        font-weight:850; margin-bottom:6px;
+      }
+      h3 { margin:0; font-size:clamp(16px,1.8vw,19px); letter-spacing:-.025em; color:var(--text); line-height:1.18; }
+      .metric { font-size:clamp(22px,3.2vw,28px); font-weight:950; letter-spacing:-.045em;
+        color:var(--text); white-space:nowrap;
+      }
+      .muted { color:var(--muted); font-size:13px; line-height:1.45; min-width:0; }
+      .small { color:var(--muted); font-size:12px; }
+      .divider { height:1px; background:var(--line); margin:14px 0; }
+      .positive { color:var(--good); font-weight:800; white-space:nowrap; }
+      .negative { color:var(--bad); font-weight:800; white-space:nowrap; }
+      .market-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(74px,auto) minmax(72px,auto);
+        gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);
+      }
+      .market-row:last-child { border-bottom:none; }
+      .stat-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; }
+      .stat-label { color:var(--muted); font-size:13px; }
+      .stat-value { color:var(--text); font-weight:850; text-align:right; }
+      @media (max-width:920px) { .cards { grid-template-columns:1fr; } }
+      @media (max-width:640px) { .card { border-radius:18px; padding:15px; } .metric { font-size:23px; }
+        .market-row { grid-template-columns:minmax(0,1fr) auto; } .market-row > div:nth-child(3) { grid-column:2; }
+      }
+      @media (max-width:430px) { .row { gap:8px; } .metric { white-space:normal; text-align:right; } }
+    </style>
+    """
+
+def render_fragment(html: str, height: int) -> None:
+    components.html(component_theme() + html, height=height, scrolling=False)
+
+
 def topbar(fetched_at: str = "") -> None:
     subtitle = "ETF execution dashboard · V60A · VNGA80 · VWCE"
     stamp = f"<span class=\"live-dot\"></span> Live · updated {fetched_at or bahrain_now()} · auto-refresh 60s"
@@ -84,64 +134,64 @@ def render_primary(primary, decisions) -> None:
 
 
 def render_market(market) -> None:
-    """Render market overview using native Streamlit layout.
-
-    This intentionally avoids large concatenated HTML blocks because Streamlit can
-    occasionally escape them and show raw <div> text on reruns/mobile browsers.
-    """
+    rows_html = []
+    for r in market.rows:
+        cls = change_class(float(r["change_pct"]))
+        rows_html.append(
+            f"""
+            <div class="market-row">
+              <div><b>{r['label']}</b><div class="small">{r['ticker']}</div></div>
+              <div>{r['price']:,.2f}</div>
+              <div class="{cls}">{pct(float(r['change_pct']), signed=True)}</div>
+            </div>
+            """
+        )
+    driver_html = "".join(f"<div class='muted'>• {d}</div>" for d in market.drivers)
     st.markdown("<div class='section-title'>Today’s markets</div>", unsafe_allow_html=True)
     left, right = st.columns([1.05, 0.95])
     with left:
-        st.markdown(
+        render_fragment(
             f"""
             <div class="card">
               <div class="eyebrow">Market sentiment</div>
               <h3>{market.regime} · {market.score}/100</h3>
-              <p class="plain">{market.one_sentence}</p>
+              <p class="muted" style="color:var(--text2);font-size:15px;line-height:1.55;margin:0">{market.one_sentence}</p>
               <div class="divider"></div>
-              {''.join(f"<div class='muted'>• {d}</div>" for d in market.drivers)}
+              {driver_html}
             </div>
             """,
-            unsafe_allow_html=True,
+            height=238,
         )
     with right:
-        with st.container(border=True):
-            st.caption("Market snapshot")
-            for r in market.rows:
-                c1, c2, c3 = st.columns([1.5, 0.8, 0.8])
-                with c1:
-                    st.markdown(f"**{r['label']}**")
-                    st.caption(str(r["ticker"]))
-                with c2:
-                    st.markdown(f"**{float(r['price']):,.2f}**")
-                with c3:
-                    delta = float(r["change_pct"])
-                    arrow = "▲" if delta >= 0 else "▼"
-                    cls = "positive" if delta >= 0 else "negative"
-                    st.markdown(f"<span class='{cls}'>{arrow} {delta:+.2f}%</span>", unsafe_allow_html=True)
-                st.divider()
+        render_fragment("<div class='card'>" + "".join(rows_html) + "</div>", height=238)
     st.plotly_chart(market_bar(market.rows), use_container_width=True, config={"displayModeBar": False})
 
 def render_etf_cards(decisions) -> None:
-    """Render ETF plan with native cards to prevent raw HTML leakage."""
-    st.markdown("<div class='section-title'>ETF plan</div>", unsafe_allow_html=True)
-    cols = st.columns(len(decisions))
-    for col, d in zip(cols, decisions.values()):
+    blocks = []
+    for d in decisions.values():
         icon = "🟢" if d.action == "Ready to deploy" else "🟡" if d.action == "Wait with limit" else "⚪"
-        with col:
-            with st.container(border=True):
-                st.caption(d.symbol)
-                st.markdown(f"### {icon} {d.action}")
-                st.markdown(f"<div class='metric'>{money(d.live_price)}</div>", unsafe_allow_html=True)
-                delta_cls = change_class(d.day_change_pct)
-                st.markdown(
-                    f"<span class='{delta_cls}'>{pct(d.day_change_pct, signed=True)}</span> today · target **{money(d.target_price)}**",
-                    unsafe_allow_html=True,
-                )
-                st.divider()
-                st.markdown(f"**Distance to target:** {pct(d.gap_pct)}")
-                st.markdown(f"**Reached within 5 days before:** {d.target_touch_5d:.1f}%")
-                st.markdown(f"**Estimated saving:** {money(d.estimated_saving_eur)}")
+        cls = change_class(d.day_change_pct)
+        blocks.append(
+            f"""
+            <div class="card">
+              <div class="row">
+                <div>
+                  <div class="eyebrow">{d.symbol}</div>
+                  <h3>{icon} {d.action}</h3>
+                </div>
+                <div class="metric">{money(d.live_price)}</div>
+              </div>
+              <div class="muted"><span class="{cls}">{pct(d.day_change_pct, signed=True)}</span> today · target {money(d.target_price)}</div>
+              <div class="divider"></div>
+              <div class="stat-line"><span class="stat-label">Distance to target</span><span class="stat-value">{pct(d.gap_pct)}</span></div>
+              <div class="stat-line"><span class="stat-label">Reached within 5 days before</span><span class="stat-value">{d.target_touch_5d:.1f}%</span></div>
+              <div class="stat-line"><span class="stat-label">Estimated saving</span><span class="stat-value">{money(d.estimated_saving_eur)}</span></div>
+            </div>
+            """
+        )
+    st.markdown("<div class='section-title'>ETF plan</div>", unsafe_allow_html=True)
+    # Render the card grid as a proper HTML component so Streamlit never prints raw <div> markup.
+    render_fragment("<div class='cards'>" + "".join(blocks) + "</div>", height=285)
 
 def select_etf(decisions) -> str:
     symbols = list(decisions.keys())

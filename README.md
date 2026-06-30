@@ -1,4 +1,27 @@
-# PALI EXECUTE v7.2.3 UI Polish
+# PALI EXECUTE v7.2.4 HTML Card Fix
+
+Based on v7.2.2 UI Polish. This patch keeps the same visual direction and fixes the raw HTML card/market-row issue by rendering those sections inside safe Streamlit HTML components.
+
+## Run
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Validation
+
+`python backtest_smoke.py` passes.
+
+## Changes
+
+- Preserved the v7.2.2 layout and charts.
+- Fixed raw `<div class="market-row">` / `<div class="card">` text appearing in the app.
+- Kept automatic refresh.
+- Kept hidden Excel memory.
+- Kept V60A, VNGA80, VWCE only.
+
+# PALI EXECUTE v7.2.2 UI Polish
 
 Streamlit version based on v7.2, with focused UI fixes only.
 
