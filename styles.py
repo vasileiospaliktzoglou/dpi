@@ -2,12 +2,12 @@ def css() -> str:
     return """
     <style>
     :root {
-      --bg:#0B1220;
-      --bg2:#111A2E;
-      --panel:#152033;
+      --bg:#0D1424;
+      --bg2:#121C30;
+      --panel:#162238;
       --panel2:#1A2740;
       --panel3:#22304A;
-      --text:#E6EDF7;
+      --text:#EAF1FA;
       --text2:#D7E0EE;
       --muted:#9FB0C7;
       --line:rgba(159,176,199,.20);
@@ -28,7 +28,7 @@ def css() -> str:
         linear-gradient(180deg,var(--bg) 0%,#0D1526 48%,#0A1120 100%);
       color:var(--text);
     }
-    [data-testid="stSidebar"] { background:#101827; border-right:1px solid var(--line); }
+    [data-testid="stSidebar"] { display:none !important; }
     .block-container { padding-top:.55rem; padding-bottom:2.2rem; max-width:1180px; }
     * { box-sizing:border-box; overflow-wrap:anywhere; word-break:normal; }
 
@@ -59,6 +59,7 @@ def css() -> str:
     .mini-label { color:var(--muted); font-size:12px; margin-top:3px; }
 
     .section-title { margin:24px 0 10px; font-size:18px; font-weight:900; letter-spacing:-.025em; color:var(--text); }
+    .first-section { margin-top:8px; }
     .cards, .timing-cards { display:grid; grid-template-columns:repeat(3, minmax(245px,1fr)); gap:14px; margin:12px 0; }
     .card, .timing-card {
       background:rgba(21,32,51,.94); border:1px solid var(--line); border-radius:22px; padding:18px;
@@ -98,7 +99,8 @@ def css() -> str:
       background:rgba(21,32,51,.88); border:1px solid var(--line); border-radius:999px;
       padding:8px 12px; margin-right:6px; color:var(--text2);
     }
-    button[kind="secondary"] { border-radius:999px !important; border:1px solid var(--line) !important; background:rgba(21,32,51,.9) !important; color:var(--text) !important; }
+    button[kind="secondary"], .stButton > button { border-radius:16px !important; border:1px solid var(--line) !important; background:rgba(21,32,51,.94) !important; color:var(--text) !important; min-height:46px; font-weight:850 !important; white-space:normal !important; }
+    .stButton > button:hover { border-color:rgba(124,183,255,.55) !important; background:rgba(26,39,64,.98) !important; }
 
     @media (max-width: 920px) {
       .cards, .timing-cards { grid-template-columns:1fr; }

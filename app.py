@@ -44,7 +44,7 @@ def component_theme() -> str:
       :root {
         --panel:#152033; --panel2:#1A2740; --text:#E6EDF7; --text2:#D7E0EE;
         --muted:#9FB0C7; --line:rgba(159,176,199,.20); --good:#3DDC84;
-        --warn:#F4B740; --bad:#F87171; --blue:#A6CCFF;
+        --warn:#F4B740; --bad:#F87171; --blue:#A6CCFF; --amber-bg:rgba(244,183,64,.16);
       }
       html, body { margin:0; padding:0; background:transparent; color:var(--text);
         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
@@ -54,6 +54,17 @@ def component_theme() -> str:
         padding:18px; box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0;
       }
       .cards, .timing-cards { display:grid; grid-template-columns:repeat(3,minmax(245px,1fr)); gap:14px; }
+      .market-grid { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:12px; }
+      .market-card { background:linear-gradient(180deg,rgba(26,39,64,.98),rgba(21,32,51,.94)); border:1px solid var(--line); border-radius:20px; padding:15px; min-width:0; }
+      .market-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+      .market-name { font-weight:850; font-size:14px; line-height:1.15; }
+      .ticker { color:var(--muted); font-size:11px; margin-top:3px; letter-spacing:.06em; }
+      .market-price { font-size:clamp(20px,3vw,27px); font-weight:950; letter-spacing:-.04em; margin-top:10px; white-space:nowrap; }
+      .market-move { font-size:13px; font-weight:900; white-space:nowrap; padding:4px 8px; border-radius:999px; background:rgba(159,176,199,.10); }
+      .market-sub { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:11px; }
+      .market-sub div { background:rgba(159,176,199,.08); border-radius:12px; padding:7px 8px; }
+      .market-sub span { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+      .market-sub b { font-size:12px; }
       .timing-card { background:linear-gradient(180deg,rgba(26,39,64,.98),rgba(21,32,51,.94)); border:1px solid var(--line); border-radius:22px; padding:18px; box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0; }
       .timing-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
       .timing-score { font-size:28px; font-weight:950; color:var(--good); white-space:nowrap; letter-spacing:-.04em; }
@@ -75,21 +86,18 @@ def component_theme() -> str:
       .divider { height:1px; background:var(--line); margin:14px 0; }
       .positive { color:var(--good); font-weight:800; white-space:nowrap; }
       .negative { color:var(--bad); font-weight:800; white-space:nowrap; }
-      .market-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(74px,auto) minmax(72px,auto);
-        gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);
-      }
-      .market-row:last-child { border-bottom:none; }
+      .status { display:inline-flex; align-items:center; border-radius:999px; padding:5px 9px; font-size:11px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
+      .status-wait { color:var(--warn); background:var(--amber-bg); border:1px solid rgba(244,183,64,.30); }
+      .status-ready { color:var(--good); background:rgba(61,220,132,.14); border:1px solid rgba(61,220,132,.30); }
+      .status-monitor { color:var(--muted); background:rgba(159,176,199,.10); border:1px solid var(--line); }
       .stat-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; }
       .stat-label { color:var(--muted); font-size:13px; }
       .stat-value { color:var(--text); font-weight:850; text-align:right; }
-      @media (max-width:920px) { .cards, .timing-cards { grid-template-columns:1fr; } }
-      @media (max-width:640px) { .card { border-radius:18px; padding:15px; } .metric { font-size:23px; }
-        .market-row { grid-template-columns:minmax(0,1fr) auto; } .market-row > div:nth-child(3) { grid-column:2; }
-      }
-      @media (max-width:430px) { .row { gap:8px; } .metric { white-space:normal; text-align:right; } }
+      @media (max-width:920px) { .cards, .timing-cards, .market-grid { grid-template-columns:1fr; } }
+      @media (max-width:640px) { .card { border-radius:18px; padding:15px; } .metric { font-size:23px; } .market-card { border-radius:18px; padding:14px; } }
+      @media (max-width:430px) { .row { gap:8px; } .metric { white-space:normal; text-align:right; } .market-price { font-size:23px; } }
     </style>
     """
-
 def render_fragment(html: str, height: int) -> None:
     components.html(component_theme() + html, height=height, scrolling=False)
 
@@ -111,72 +119,61 @@ def topbar(fetched_at: str = "") -> None:
     )
 
 
-def render_primary(primary, decisions) -> None:
-    total_saving = sum(max(0, d.estimated_saving_eur) for d in decisions.values())
-    st.markdown(
-        f"""
-        <div class="hero">
-          <div class="hero-grid">
-            <div>
-              <div class="eyebrow">Today’s execution decision</div>
-              <div class="decision">{primary.action}</div>
-              <p class="plain">{primary.action_plain}</p>
-              <div style="margin-top:12px">
-                <span class="pill">Focus: <b>{primary.symbol}</b></span>
-                <span class="pill">Evidence: <b>{primary.confidence_label}</b></span>
-                <span class="pill">Data: <b>{primary.data_source}</b></span>
-              </div>
-            </div>
-            <div class="hero-metrics">
-              <div class="mini"><div class="mini-value">{money(primary.live_price)}</div><div class="mini-label">Current price</div></div>
-              <div class="mini"><div class="mini-value">{money(primary.target_price)}</div><div class="mini-label">Limit target</div></div>
-              <div class="mini"><div class="mini-value">{pct(primary.gap_pct)}</div><div class="mini-label">Above target</div></div>
-              <div class="mini"><div class="mini-value">{money(total_saving)}</div><div class="mini-label">Potential saving vs buying now</div></div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def render_market(market) -> None:
-    rows_html = []
+    st.markdown("<div class='section-title first-section'>Today’s markets</div>", unsafe_allow_html=True)
+
+    market_cards = []
     for r in market.rows:
         cls = change_class(float(r["change_pct"]))
-        rows_html.append(
+        change_5d = float(r.get("change_5d_pct", 0.0))
+        change_1m = float(r.get("change_1m_pct", 0.0))
+        cls5 = change_class(change_5d)
+        cls1m = change_class(change_1m)
+        market_cards.append(
             f"""
-            <div class="market-row">
-              <div><b>{r['label']}</b><div class="small">{r['ticker']}</div></div>
-              <div>{r['price']:,.2f}</div>
-              <div class="{cls}">{pct(float(r['change_pct']), signed=True)}</div>
+            <div class="market-card">
+              <div class="market-top">
+                <div>
+                  <div class="market-name">{r['label']}</div>
+                  <div class="ticker">{r['ticker']}</div>
+                </div>
+                <div class="market-move {cls}">{pct(float(r['change_pct']), signed=True)}</div>
+              </div>
+              <div class="market-price">{r['price']:,.2f}</div>
+              <div class="market-sub">
+                <div><span>5 days</span><b class="{cls5}">{pct(change_5d, signed=True)}</b></div>
+                <div><span>1 month</span><b class="{cls1m}">{pct(change_1m, signed=True)}</b></div>
+              </div>
             </div>
             """
         )
-    driver_html = "".join(f"<div class='muted'>• {d}</div>" for d in market.drivers)
-    st.markdown("<div class='section-title'>Today’s markets</div>", unsafe_allow_html=True)
-    left, right = st.columns([1.05, 0.95])
-    with left:
-        render_fragment(
-            f"""
-            <div class="card">
-              <div class="eyebrow">Market sentiment</div>
-              <h3>{market.regime} · {market.score}/100</h3>
-              <p class="muted" style="color:var(--text2);font-size:15px;line-height:1.55;margin:0">{market.one_sentence}</p>
-              <div class="divider"></div>
-              {driver_html}
-            </div>
-            """,
-            height=238,
-        )
-    with right:
-        render_fragment("<div class='card'>" + "".join(rows_html) + "</div>", height=238)
+    render_fragment("<div class='market-grid'>" + "".join(market_cards) + "</div>", height=360)
+
+    driver_html = "".join(f"<div class='muted'>• {d}</div>" for d in market.drivers[:3])
+    render_fragment(
+        f"""
+        <div class="card">
+          <div class="eyebrow">Market insight</div>
+          <h3>{market.regime} · {market.score}/100</h3>
+          <p class="muted" style="color:var(--text2);font-size:15px;line-height:1.55;margin:0">{market.one_sentence}</p>
+          <div class="divider"></div>
+          {driver_html}
+        </div>
+        """,
+        height=210,
+    )
     st.plotly_chart(market_bar(market.rows), use_container_width=True, config={"displayModeBar": False})
+def status_class(action: str) -> str:
+    if action == "Ready to deploy":
+        return "status-ready"
+    if action == "Wait with limit":
+        return "status-wait"
+    return "status-monitor"
+
 
 def render_etf_cards(decisions) -> None:
     blocks = []
     for d in decisions.values():
-        icon = "🟢" if d.action == "Ready to deploy" else "🟡" if d.action == "Wait with limit" else "⚪"
         cls = change_class(d.day_change_pct)
         blocks.append(
             f"""
@@ -184,23 +181,20 @@ def render_etf_cards(decisions) -> None:
               <div class="row">
                 <div>
                   <div class="eyebrow">{d.symbol}</div>
-                  <h3>{icon} {d.action}</h3>
+                  <span class="status {status_class(d.action)}">{d.action}</span>
                 </div>
                 <div class="metric">{money(d.live_price)}</div>
               </div>
-              <div class="muted"><span class="{cls}">{pct(d.day_change_pct, signed=True)}</span> today · target {money(d.target_price)}</div>
+              <div class="muted" style="margin-top:10px"><span class="{cls}">{pct(d.day_change_pct, signed=True)}</span> today · target {money(d.target_price)}</div>
               <div class="divider"></div>
               <div class="stat-line"><span class="stat-label">Distance to target</span><span class="stat-value">{pct(d.gap_pct)}</span></div>
-              <div class="stat-line"><span class="stat-label">Reached within 5 days before</span><span class="stat-value">{d.target_touch_5d:.1f}%</span></div>
+              <div class="stat-line"><span class="stat-label">Historical 5-day target touch</span><span class="stat-value">{d.target_touch_5d:.1f}%</span></div>
               <div class="stat-line"><span class="stat-label">Estimated saving</span><span class="stat-value">{money(d.estimated_saving_eur)}</span></div>
             </div>
             """
         )
     st.markdown("<div class='section-title'>ETF plan</div>", unsafe_allow_html=True)
-    # Render the card grid as a proper HTML component so Streamlit never prints raw <div> markup.
     render_fragment("<div class='cards'>" + "".join(blocks) + "</div>", height=285)
-
-
 def render_timing_plan(decisions) -> None:
     """Show the historical best weekday and month window for each ETF."""
     blocks = []
@@ -233,17 +227,18 @@ def select_etf(decisions) -> str:
     current = st.session_state.get("selected_etf", symbols[0])
     if current not in symbols:
         current = symbols[0]
-    selected = st.radio(
-        "Choose ETF",
-        symbols,
-        index=symbols.index(current),
-        horizontal=True,
-        help="Pick one ETF to inspect. The rest of the app stays focused on that ETF.",
-    )
+
+    st.markdown("<div class='section-title'>Detailed ETF view</div>", unsafe_allow_html=True)
+    cols = st.columns(len(symbols))
+    selected = current
+    for col, sym in zip(cols, symbols):
+        with col:
+            d = decisions[sym]
+            label = f"{sym} · {d.action}"
+            if st.button(label, key=f"choose_{sym}", use_container_width=True):
+                selected = sym
     st.session_state["selected_etf"] = selected
     return selected
-
-
 def render_selected_etf(d) -> None:
     st.markdown(f"<div class='section-title'>{d.symbol} detailed view</div>", unsafe_allow_html=True)
     summary_cols = st.columns(4)
@@ -346,25 +341,16 @@ def main() -> None:
 
     install_auto_refresh(60)
 
-    with st.sidebar:
-        page = st.radio("Navigation", ["Dashboard", "ETF Detail", "Analytics"], label_visibility="collapsed")
-        st.caption("Updates automatically every 60 seconds. Excel memory runs silently in the background.")
-
     market, decisions, primary = load_system(st.session_state["refresh_key"])
     topbar(market.fetched_at)
 
-    if page == "Dashboard":
-        render_primary(primary, decisions)
-        render_market(market)
-        render_etf_cards(decisions)
-        render_timing_plan(decisions)
-        selected = select_etf(decisions)
-        render_selected_etf(decisions[selected])
-    elif page == "ETF Detail":
-        selected = select_etf(decisions)
-        render_selected_etf(decisions[selected])
-    else:
-        render_market(market)
+    render_market(market)
+    render_etf_cards(decisions)
+    render_timing_plan(decisions)
+    selected = select_etf(decisions)
+    render_selected_etf(decisions[selected])
+
+    with st.expander("Analytics table", expanded=False):
         render_analytics(decisions)
 
 

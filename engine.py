@@ -157,16 +157,30 @@ def build_market_summary(refresh_key: int = 0) -> MarketSummary:
     for label, ticker in MARKET_TICKERS.items():
         q = latest_quote(ticker, refresh_key)
         fetched = q.get("fetched_at", fetched) or fetched
+        change_5d = 0.0
+        change_1m = 0.0
+        try:
+            hist = fetch_history(ticker, "3mo", refresh_key).history
+            closes = hist["Close"].astype(float).dropna()
+            if len(closes) > 6 and closes.iloc[-6] != 0:
+                change_5d = (q["price"] / float(closes.iloc[-6]) - 1) * 100
+            if len(closes) > 22 and closes.iloc[-22] != 0:
+                change_1m = (q["price"] / float(closes.iloc[-22]) - 1) * 100
+        except Exception:
+            change_5d = 0.0
+            change_1m = 0.0
         rows.append({
-            "label": label,
+            "label": "MSCI World" if label == "Global stocks" else label,
             "ticker": ticker,
             "price": q["price"],
             "change_pct": q["change_pct"],
+            "change_5d_pct": change_5d,
+            "change_1m_pct": change_1m,
             "source": q["source"],
             "date": q["date"],
         })
 
-    equity = [r["change_pct"] for r in rows if r["label"] in {"Global stocks", "S&P 500", "Europe stocks"}]
+    equity = [r["change_pct"] for r in rows if r["label"] in {"MSCI World", "S&P 500", "Europe stocks"}]
     avg_equity = sum(equity) / len(equity) if equity else 0.0
     vix_price = next((r["price"] for r in rows if r["label"] == "Volatility"), 18.0)
     vix_change = next((r["change_pct"] for r in rows if r["label"] == "Volatility"), 0.0)

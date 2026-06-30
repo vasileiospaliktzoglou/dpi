@@ -23,3 +23,14 @@ Smoke test:
 ```bash
 python backtest_smoke.py
 ```
+
+
+## v7.3 final cosmetic patch
+
+- Page now starts with Today's markets.
+- Removed the left sidebar navigation.
+- Removed the duplicated Today's execution decision block.
+- Replaced emoji status labels with professional badges.
+- Market cards now show current value, today's move, 5-day move and 1-month move.
+- Kept the detailed ETF charts and timing logic from the v7.2.5 base.
+- Smoke test: `python backtest_smoke.py` passed in the build environment.
