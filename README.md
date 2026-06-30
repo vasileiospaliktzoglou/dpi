@@ -1,4 +1,4 @@
-# PALI EXECUTE v7.2.2 UI Polish
+# PALI EXECUTE v7.2.3 UI Polish
 
 Streamlit version based on v7.2, with focused UI fixes only.
 

@@ -84,19 +84,11 @@ def render_primary(primary, decisions) -> None:
 
 
 def render_market(market) -> None:
-    rows_html = []
-    for r in market.rows:
-        cls = change_class(float(r["change_pct"]))
-        rows_html.append(
-            f"""
-            <div class="market-row">
-              <div><b>{r['label']}</b><div class="small">{r['ticker']}</div></div>
-              <div>{r['price']:,.2f}</div>
-              <div class="{cls}">{pct(float(r['change_pct']), signed=True)}</div>
-            </div>
-            """
-        )
-    driver_html = "".join(f"<div class='muted'>• {d}</div>" for d in market.drivers)
+    """Render market overview using native Streamlit layout.
+
+    This intentionally avoids large concatenated HTML blocks because Streamlit can
+    occasionally escape them and show raw <div> text on reruns/mobile browsers.
+    """
     st.markdown("<div class='section-title'>Today’s markets</div>", unsafe_allow_html=True)
     left, right = st.columns([1.05, 0.95])
     with left:
@@ -107,41 +99,49 @@ def render_market(market) -> None:
               <h3>{market.regime} · {market.score}/100</h3>
               <p class="plain">{market.one_sentence}</p>
               <div class="divider"></div>
-              {driver_html}
+              {''.join(f"<div class='muted'>• {d}</div>" for d in market.drivers)}
             </div>
             """,
             unsafe_allow_html=True,
         )
     with right:
-        st.markdown("<div class='card'>" + "".join(rows_html) + "</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.caption("Market snapshot")
+            for r in market.rows:
+                c1, c2, c3 = st.columns([1.5, 0.8, 0.8])
+                with c1:
+                    st.markdown(f"**{r['label']}**")
+                    st.caption(str(r["ticker"]))
+                with c2:
+                    st.markdown(f"**{float(r['price']):,.2f}**")
+                with c3:
+                    delta = float(r["change_pct"])
+                    arrow = "▲" if delta >= 0 else "▼"
+                    cls = "positive" if delta >= 0 else "negative"
+                    st.markdown(f"<span class='{cls}'>{arrow} {delta:+.2f}%</span>", unsafe_allow_html=True)
+                st.divider()
     st.plotly_chart(market_bar(market.rows), use_container_width=True, config={"displayModeBar": False})
 
-
 def render_etf_cards(decisions) -> None:
-    blocks = []
-    for d in decisions.values():
-        icon = "🟢" if d.action == "Ready to deploy" else "🟡" if d.action == "Wait with limit" else "⚪"
-        cls = change_class(d.day_change_pct)
-        blocks.append(
-            f"""
-            <div class="card">
-              <div class="row">
-                <div>
-                  <div class="eyebrow">{d.symbol}</div>
-                  <h3>{icon} {d.action}</h3>
-                </div>
-                <div class="metric">{money(d.live_price)}</div>
-              </div>
-              <div class="muted"><span class="{cls}">{pct(d.day_change_pct, signed=True)}</span> today · target {money(d.target_price)}</div>
-              <div class="divider"></div>
-              <div class="stat-line"><span class="stat-label">Distance to target</span><span class="stat-value">{pct(d.gap_pct)}</span></div>
-              <div class="stat-line"><span class="stat-label">Reached within 5 days before</span><span class="stat-value">{d.target_touch_5d:.1f}%</span></div>
-              <div class="stat-line"><span class="stat-label">Estimated saving</span><span class="stat-value">{money(d.estimated_saving_eur)}</span></div>
-            </div>
-            """
-        )
+    """Render ETF plan with native cards to prevent raw HTML leakage."""
     st.markdown("<div class='section-title'>ETF plan</div>", unsafe_allow_html=True)
-    st.markdown("<div class='cards'>" + "".join(blocks) + "</div>", unsafe_allow_html=True)
+    cols = st.columns(len(decisions))
+    for col, d in zip(cols, decisions.values()):
+        icon = "🟢" if d.action == "Ready to deploy" else "🟡" if d.action == "Wait with limit" else "⚪"
+        with col:
+            with st.container(border=True):
+                st.caption(d.symbol)
+                st.markdown(f"### {icon} {d.action}")
+                st.markdown(f"<div class='metric'>{money(d.live_price)}</div>", unsafe_allow_html=True)
+                delta_cls = change_class(d.day_change_pct)
+                st.markdown(
+                    f"<span class='{delta_cls}'>{pct(d.day_change_pct, signed=True)}</span> today · target **{money(d.target_price)}**",
+                    unsafe_allow_html=True,
+                )
+                st.divider()
+                st.markdown(f"**Distance to target:** {pct(d.gap_pct)}")
+                st.markdown(f"**Reached within 5 days before:** {d.target_touch_5d:.1f}%")
+                st.markdown(f"**Estimated saving:** {money(d.estimated_saving_eur)}")
 
 def select_etf(decisions) -> str:
     symbols = list(decisions.keys())
