@@ -1,5 +1,5 @@
 APP_TITLE = "PALI EXECUTE"
-APP_VERSION = "v7.1 Professional UX"
+APP_VERSION = "v7.2"
 
 ETFS = {
     "V60A": {
