@@ -46,6 +46,11 @@ class ETFDecision:
     confidence_label: str
     confidence_score: int
     window: str
+    best_weekday: str
+    best_month_window: str
+    timing_score: float
+    timing_sample: int
+    timing_reason: str
     reason: str
     guardrail: str
     history: pd.DataFrame
@@ -68,6 +73,82 @@ def _target_touch_rates(df: pd.DataFrame, target_distance_atr: float) -> tuple[f
     n1, n5 = len(one), len(five)
     c1, c5 = int(sum(one)), int(sum(five))
     return (c1 / n1 * 100 if n1 else 0.0, c5 / n5 * 100 if n5 else 0.0, c1, c5, n1, n5)
+
+
+
+
+def _month_bucket(day: int) -> str:
+    if day <= 5:
+        return "1st–5th"
+    if day <= 10:
+        return "6th–10th"
+    if day <= 15:
+        return "11th–15th"
+    if day <= 20:
+        return "16th–20th"
+    if day <= 25:
+        return "21st–25th"
+    return "26th–month end"
+
+
+def _rate_table(events: list[dict], key: str, min_sample: int = 20) -> list[tuple[str, float, int, int]]:
+    table = []
+    values = sorted({e[key] for e in events})
+    for value in values:
+        subset = [e for e in events if e[key] == value]
+        n = len(subset)
+        if n < min_sample:
+            continue
+        wins = sum(1 for e in subset if e["touch5"])
+        rate = wins / n * 100 if n else 0.0
+        table.append((value, rate, wins, n))
+    return sorted(table, key=lambda x: (x[1], x[3]), reverse=True)
+
+
+def _timing_edges(df: pd.DataFrame, target_distance_atr: float) -> tuple[str, str, float, int, str]:
+    """Find simple historical timing patterns for deployment planning.
+
+    This does not forecast exact prices. It asks: on which weekdays and month windows
+    did a target x ATR below the close get touched within the next five trading days?
+    """
+    if not isinstance(df.index, pd.DatetimeIndex):
+        work = df.copy()
+        work.index = pd.to_datetime(work.index, errors="coerce")
+    else:
+        work = df.copy()
+    work = work.dropna(subset=["Close", "Low", "High"])
+    close = work["Close"].astype(float).reset_index(drop=True)
+    low = work["Low"].astype(float).reset_index(drop=True)
+    daily_range = (work["High"].astype(float) - work["Low"].astype(float)).reset_index(drop=True)
+    rolling_atr = daily_range.rolling(14).mean().bfill()
+    dates = pd.Series(work.index).reset_index(drop=True)
+    events = []
+    for i in range(30, len(work) - 5):
+        date = dates.iloc[i]
+        if pd.isna(date):
+            continue
+        target = close.iloc[i] - target_distance_atr * rolling_atr.iloc[i]
+        touch5 = bool(low.iloc[i + 1:i + 6].min() <= target)
+        events.append({
+            "weekday": date.day_name(),
+            "bucket": _month_bucket(int(date.day)),
+            "touch5": touch5,
+        })
+    weekday_table = _rate_table(events, "weekday", min_sample=30)
+    bucket_table = _rate_table(events, "bucket", min_sample=30)
+    best_weekday = weekday_table[0][0] if weekday_table else "No clear weekday edge"
+    best_bucket = bucket_table[0][0] if bucket_table else "No clear month-window edge"
+    best_rate = weekday_table[0][1] if weekday_table else 0.0
+    best_n = weekday_table[0][3] if weekday_table else 0
+    if weekday_table and bucket_table:
+        reason = (
+            f"Historically, {best_weekday}s had the strongest five-day target-touch rate "
+            f"({weekday_table[0][2]}/{weekday_table[0][3]} cases). The strongest month window was "
+            f"{best_bucket} ({bucket_table[0][2]}/{bucket_table[0][3]} cases)."
+        )
+    else:
+        reason = "There is not enough stable history to claim a strong weekday or month-window edge."
+    return best_weekday, best_bucket, best_rate, best_n, reason
 
 
 def build_market_summary(refresh_key: int = 0) -> MarketSummary:
@@ -131,6 +212,7 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
     gap = live - target
     gap_pct = (gap / target * 100) if target else 0.0
     r1, r5, c1, c5, n1, n5 = _target_touch_rates(df, offset)
+    best_weekday, best_month_window, timing_score, timing_sample, timing_reason = _timing_edges(df, offset)
 
     planned = float(meta.get("planned_amount_eur", 10000))
     estimated_saving = planned * max(gap_pct, 0) / 100.0
@@ -165,6 +247,7 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
         symbol, meta["name"], meta["role"], meta["ticker"], action, plain, live, previous,
         day_change_pct, target, gap, gap_pct, current_atr, current_rsi, trend,
         r1, r5, c1, c5, n1, n5, confidence_label, confidence_score, window,
+        best_weekday, best_month_window, timing_score, timing_sample, timing_reason,
         reason, guardrail, df, data_source, fetched_at, estimated_saving,
     )
 

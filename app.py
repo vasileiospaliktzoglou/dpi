@@ -53,7 +53,14 @@ def component_theme() -> str:
       .card { background:rgba(21,32,51,.94); border:1px solid var(--line); border-radius:22px;
         padding:18px; box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0;
       }
-      .cards { display:grid; grid-template-columns:repeat(3,minmax(245px,1fr)); gap:14px; }
+      .cards, .timing-cards { display:grid; grid-template-columns:repeat(3,minmax(245px,1fr)); gap:14px; }
+      .timing-card { background:linear-gradient(180deg,rgba(26,39,64,.98),rgba(21,32,51,.94)); border:1px solid var(--line); border-radius:22px; padding:18px; box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0; }
+      .timing-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+      .timing-score { font-size:28px; font-weight:950; color:var(--good); white-space:nowrap; letter-spacing:-.04em; }
+      .timing-grid { display:grid; grid-template-columns:1fr; gap:8px; margin-top:14px; }
+      .timing-grid div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border-radius:14px; background:rgba(159,176,199,.08); }
+      .timing-grid span { color:var(--muted); font-size:12px; }
+      .timing-grid b { color:var(--text); font-size:13px; text-align:right; }
       .row { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; min-width:0; }
       .row > * { min-width:0; }
       .eyebrow { color:var(--blue); text-transform:uppercase; letter-spacing:.14em; font-size:11px;
@@ -75,7 +82,7 @@ def component_theme() -> str:
       .stat-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; }
       .stat-label { color:var(--muted); font-size:13px; }
       .stat-value { color:var(--text); font-weight:850; text-align:right; }
-      @media (max-width:920px) { .cards { grid-template-columns:1fr; } }
+      @media (max-width:920px) { .cards, .timing-cards { grid-template-columns:1fr; } }
       @media (max-width:640px) { .card { border-radius:18px; padding:15px; } .metric { font-size:23px; }
         .market-row { grid-template-columns:minmax(0,1fr) auto; } .market-row > div:nth-child(3) { grid-column:2; }
       }
@@ -193,6 +200,34 @@ def render_etf_cards(decisions) -> None:
     # Render the card grid as a proper HTML component so Streamlit never prints raw <div> markup.
     render_fragment("<div class='cards'>" + "".join(blocks) + "</div>", height=285)
 
+
+def render_timing_plan(decisions) -> None:
+    """Show the historical best weekday and month window for each ETF."""
+    blocks = []
+    for d in decisions.values():
+        blocks.append(
+            f"""
+            <div class="timing-card">
+              <div class="timing-head">
+                <div>
+                  <div class="eyebrow">{d.symbol}</div>
+                  <h3>Best historical timing</h3>
+                </div>
+                <div class="timing-score">{d.timing_score:.0f}%</div>
+              </div>
+              <div class="timing-grid">
+                <div><span>Best weekday</span><b>{d.best_weekday}</b></div>
+                <div><span>Best month window</span><b>{d.best_month_window}</b></div>
+              </div>
+              <div class="divider"></div>
+              <div class="muted">{d.timing_reason}</div>
+            </div>
+            """
+        )
+    st.markdown("<div class='section-title'>Best timing window</div>", unsafe_allow_html=True)
+    st.caption("Based on the last five years: when did a limit target similar to today’s distance get reached within five trading days?")
+    render_fragment("<div class='timing-cards'>" + "".join(blocks) + "</div>", height=310)
+
 def select_etf(decisions) -> str:
     symbols = list(decisions.keys())
     current = st.session_state.get("selected_etf", symbols[0])
@@ -246,6 +281,14 @@ def render_selected_etf(d) -> None:
             "This is not a forecast; it is a historical patience score."
         )
 
+    with st.expander("Best day and month-window logic", expanded=False):
+        st.write(
+            f"For {d.symbol}, the best weekday in the 5-year test was **{d.best_weekday}**. "
+            f"The strongest part of the month was **{d.best_month_window}**. "
+            f"This comes from checking when similar limit targets were reached within five trading days. "
+            f"{d.timing_reason} This should guide when to check or place limits, not force a market order."
+        )
+
 
 def render_analytics(decisions) -> None:
     st.markdown("<div class='section-title'>Analytics</div>", unsafe_allow_html=True)
@@ -259,6 +302,8 @@ def render_analytics(decisions) -> None:
             "Above target": f"{d.gap_pct:.2f}%",
             "Potential saving": round(d.estimated_saving_eur, 2),
             "5-day target touch": f"{d.target_touch_5d:.1f}% ({d.target_touch_5d_count}/{d.sample_5d})",
+            "Best weekday": d.best_weekday,
+            "Best month window": d.best_month_window,
             "Trend": d.trend,
             "Source": d.data_source,
         }
@@ -312,6 +357,7 @@ def main() -> None:
         render_primary(primary, decisions)
         render_market(market)
         render_etf_cards(decisions)
+        render_timing_plan(decisions)
         selected = select_etf(decisions)
         render_selected_etf(decisions[selected])
     elif page == "ETF Detail":

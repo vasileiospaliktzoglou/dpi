@@ -59,11 +59,18 @@ def css() -> str:
     .mini-label { color:var(--muted); font-size:12px; margin-top:3px; }
 
     .section-title { margin:24px 0 10px; font-size:18px; font-weight:900; letter-spacing:-.025em; color:var(--text); }
-    .cards { display:grid; grid-template-columns:repeat(3, minmax(245px,1fr)); gap:14px; margin:12px 0; }
-    .card {
+    .cards, .timing-cards { display:grid; grid-template-columns:repeat(3, minmax(245px,1fr)); gap:14px; margin:12px 0; }
+    .card, .timing-card {
       background:rgba(21,32,51,.94); border:1px solid var(--line); border-radius:22px; padding:18px;
       box-shadow:0 18px 42px rgba(4,8,18,.20); overflow:hidden; min-width:0;
     }
+    .timing-card { background:linear-gradient(180deg,rgba(26,39,64,.98),rgba(21,32,51,.94)); }
+    .timing-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .timing-score { font-size:28px; font-weight:950; color:var(--good); white-space:nowrap; letter-spacing:-.04em; }
+    .timing-grid { display:grid; grid-template-columns:1fr; gap:8px; margin-top:14px; }
+    .timing-grid div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border-radius:14px; background:rgba(159,176,199,.08); }
+    .timing-grid span { color:var(--muted); font-size:12px; }
+    .timing-grid b { color:var(--text); font-size:13px; text-align:right; }
     .card h3 { margin:0; font-size:clamp(16px,1.8vw,19px); letter-spacing:-.025em; color:var(--text); line-height:1.18; }
     .metric { font-size:clamp(22px,3.2vw,28px); font-weight:950; letter-spacing:-.045em; color:var(--text); white-space:nowrap; }
     .row { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; min-width:0; }
@@ -94,7 +101,7 @@ def css() -> str:
     button[kind="secondary"] { border-radius:999px !important; border:1px solid var(--line) !important; background:rgba(21,32,51,.9) !important; color:var(--text) !important; }
 
     @media (max-width: 920px) {
-      .cards { grid-template-columns:1fr; }
+      .cards, .timing-cards { grid-template-columns:1fr; }
       .hero-grid { grid-template-columns:1fr; }
     }
     @media (max-width: 640px) {
