@@ -12,7 +12,7 @@ from config import APP_TITLE, APP_VERSION, LOG_DIR, LOG_FILE
 from styles import css
 from engine import build_decisions, choose_primary
 from charts import price_chart, comparison_chart, market_bar
-from excel_memory import save_run, append_execution
+from excel_memory import save_run
 
 st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="collapsed")
 st.markdown(css(), unsafe_allow_html=True)
@@ -187,14 +187,14 @@ def render_etf_cards(decisions) -> None:
               </div>
               <div class="muted" style="margin-top:10px"><span class="{cls}">{pct(d.day_change_pct, signed=True)}</span> today · target {money(d.target_price)}</div>
               <div class="divider"></div>
-              <div class="stat-line"><span class="stat-label">Fair value</span><span class="stat-value">{money(d.fair_value)}</span></div>
-              <div class="stat-line"><span class="stat-label">Expected range</span><span class="stat-value">{money(d.expected_low)}–{money(d.expected_high)}</span></div>
-              <div class="stat-line"><span class="stat-label">Better price if wait 3d</span><span class="stat-value">{d.better_price_3d:.0f}%</span></div>
+              <div class="stat-line"><span class="stat-label">Distance to target</span><span class="stat-value">{pct(d.gap_pct)}</span></div>
+              <div class="stat-line"><span class="stat-label">Historical 5-day target touch</span><span class="stat-value">{d.target_touch_5d:.1f}%</span></div>
+              <div class="stat-line"><span class="stat-label">Estimated saving</span><span class="stat-value">{money(d.estimated_saving_eur)}</span></div>
             </div>
             """
         )
     st.markdown("<div class='section-title'>ETF plan</div>", unsafe_allow_html=True)
-    render_fragment("<div class='cards'>" + "".join(blocks) + "</div>", height=300)
+    render_fragment("<div class='cards'>" + "".join(blocks) + "</div>", height=285)
 def render_timing_plan(decisions) -> None:
     """Show the historical best weekday and month window for each ETF."""
     blocks = []
@@ -241,12 +241,11 @@ def select_etf(decisions) -> str:
     return selected
 def render_selected_etf(d) -> None:
     st.markdown(f"<div class='section-title'>{d.symbol} detailed view</div>", unsafe_allow_html=True)
-    summary_cols = st.columns(5)
+    summary_cols = st.columns(4)
     items = [
         ("Current", money(d.live_price), pct(d.day_change_pct, signed=True)),
-        ("Fair value", money(d.fair_value), pct(d.fair_value_gap_pct, signed=True) + " vs live"),
-        ("Expected range", f"{money(d.expected_low)}–{money(d.expected_high)}", "normal intraday band"),
         ("Target", money(d.target_price), f"{money(d.gap_eur)} below"),
+        ("Trend", d.trend, f"RSI {d.rsi:.0f}"),
         ("Review window", d.window, d.confidence_label),
     ]
     for col, (label, value, note) in zip(summary_cols, items):
@@ -263,33 +262,6 @@ def render_selected_etf(d) -> None:
           <p class="plain">{d.reason}</p>
           <div class="divider"></div>
           <div class="muted">If you were planning to invest the model amount today, waiting for the target instead of buying now could save about <b>{money(d.estimated_saving_eur)}</b>. This is the financial-impact metric; it matters more than prediction accuracy.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div class='section-title'>Decision engine additions</div>", unsafe_allow_html=True)
-    qcols = st.columns(4)
-    qitems = [
-        ("Fair value", money(d.fair_value), pct(d.fair_value_gap_pct, signed=True) + " vs live"),
-        ("Expected intraday range", f"{money(d.expected_low)}–{money(d.expected_high)}", "Historical 20th–80th percentile"),
-        ("Wait 1 day", f"{d.better_price_1d:.0f}%", "Chance of a better intraday price"),
-        ("Wait 3 days", f"{d.better_price_3d:.0f}%", f"Sample: {d.better_price_sample} analogs"),
-    ]
-    for col, (label, value, note) in zip(qcols, qitems):
-        with col:
-            st.markdown(f"<div class='card'><div class='eyebrow'>{label}</div><div class='metric'>{value}</div><div class='muted'>{note}</div></div>", unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="soft" style="margin-top:12px">
-          <div class="eyebrow">Historical patience probabilities</div>
-          <p class="plain">{d.better_price_note}</p>
-          <div class="divider"></div>
-          <div class="stat-line"><span class="stat-label">Better price within 1 day</span><span class="stat-value">{d.better_price_1d:.1f}% ({d.better_price_1d_count}/{d.better_price_sample})</span></div>
-          <div class="stat-line"><span class="stat-label">Better price within 2 days</span><span class="stat-value">{d.better_price_2d:.1f}% ({d.better_price_2d_count}/{d.better_price_sample})</span></div>
-          <div class="stat-line"><span class="stat-label">Better price within 3 days</span><span class="stat-value">{d.better_price_3d:.1f}% ({d.better_price_3d_count}/{d.better_price_sample})</span></div>
-          <div class="divider"></div>
-          <div class="muted">{d.expected_range_note}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -322,15 +294,8 @@ def render_analytics(decisions) -> None:
             "Action": d.action,
             "Current": round(d.live_price, 2),
             "Target": round(d.target_price, 2),
-            "Fair value": round(d.fair_value, 2),
-            "Fair gap": f"{d.fair_value_gap_pct:+.2f}%",
-            "Expected low": round(d.expected_low, 2),
-            "Expected high": round(d.expected_high, 2),
             "Above target": f"{d.gap_pct:.2f}%",
             "Potential saving": round(d.estimated_saving_eur, 2),
-            "Better price 1d": f"{d.better_price_1d:.1f}%",
-            "Better price 2d": f"{d.better_price_2d:.1f}%",
-            "Better price 3d": f"{d.better_price_3d:.1f}%",
             "5-day target touch": f"{d.target_touch_5d:.1f}% ({d.target_touch_5d_count}/{d.sample_5d})",
             "Best weekday": d.best_weekday,
             "Best month window": d.best_month_window,
@@ -340,52 +305,6 @@ def render_analytics(decisions) -> None:
         for d in decisions.values()
     ])
     st.dataframe(table, use_container_width=True, hide_index=True)
-
-
-def render_execution_journal(decisions) -> None:
-    st.markdown("<div class='section-title'>Execution journal</div>", unsafe_allow_html=True)
-    st.caption("Record real IBKR executions here. These rows are saved in data/PALI_EXECUTE_MEMORY.xlsx so the model can be reviewed and improved over time.")
-    symbols = list(decisions.keys())
-    with st.form("execution_journal_form", clear_on_submit=False):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            sym = st.selectbox("ETF", symbols, index=symbols.index(st.session_state.get("selected_etf", symbols[0])) if st.session_state.get("selected_etf", symbols[0]) in symbols else 0)
-            side = st.selectbox("Action", ["BUY", "WAIT", "SKIPPED", "CANCELLED"])
-        d = decisions[sym]
-        with c2:
-            execution_price = st.number_input("Execution / limit price", min_value=0.0, value=float(d.live_price), step=0.001, format="%.3f")
-            shares = st.number_input("Shares", min_value=0, value=0, step=1)
-        with c3:
-            amount = st.number_input("Amount EUR", min_value=0.0, value=float(execution_price * shares), step=100.0, format="%.2f")
-            confidence = st.selectbox("Confidence", [d.confidence_label, "High", "Moderate", "Low"], index=0)
-        notes = st.text_area("Notes", placeholder="Example: bought after US open; IBKR bid/ask confirmed; kept second tranche for lower level.")
-        submitted = st.form_submit_button("Save journal row", use_container_width=True)
-        if submitted:
-            row = {
-                "timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "etf": sym,
-                "action": side,
-                "execution_price": execution_price,
-                "shares": int(shares),
-                "amount_eur": float(amount),
-                "live_price": d.live_price,
-                "suggested_limit": d.target_price,
-                "fair_value": d.fair_value,
-                "expected_low": d.expected_low,
-                "expected_high": d.expected_high,
-                "better_price_1d": d.better_price_1d,
-                "better_price_2d": d.better_price_2d,
-                "better_price_3d": d.better_price_3d,
-                "confidence": confidence,
-                "notes": notes,
-            }
-            try:
-                append_execution(row)
-                st.success("Journal row saved to Excel memory.")
-            except Exception as exc:
-                logging.exception("Execution journal save failed")
-                st.error(f"Could not save journal row: {exc}")
-
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -433,9 +352,6 @@ def main() -> None:
 
     with st.expander("Analytics table", expanded=False):
         render_analytics(decisions)
-
-    with st.expander("Execution journal", expanded=False):
-        render_execution_journal(decisions)
 
 
 if __name__ == "__main__":

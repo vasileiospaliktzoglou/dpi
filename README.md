@@ -1,32 +1,36 @@
-# PALI Execute v8.1 — Tested Decision Engine
+# PALI EXECUTE v7.2.5 — Timing Window Polish
 
-Streamlit decision-support app for V60A, VNGA80 and VWCE.
+This release keeps the v7.2.2 UI Polish foundation and applies focused improvements:
 
-## What is included
-- Daily BUY / WAIT / STRONG BUY / EXCEPTIONAL BUY signal.
-- Suggested limit price based on historical ETF behaviour.
-- Expected daily movement and next-day probability context.
-- ETF priority board.
-- Price ladder.
-- Journal-ready snapshot.
-- Robust fallback mode if Yahoo data is temporarily unavailable.
+- Keeps the previous best layout and detailed charts.
+- Fixes the raw HTML card rendering issue.
+- Adds a **Best timing window** section for each ETF.
+- Shows the historically strongest weekday and part of the month for V60A, VNGA80, and VWCE.
+- Explains why the timing window matters in plain English.
+- Keeps Excel memory hidden/internal.
+- Maintains 5-year backtest statistics.
+- Keeps automatic refresh.
 
-## Important
-Yahoo Finance data for European ETFs may be delayed. Always confirm the final bid/ask in IBKR before placing orders.
+Run:
 
-## Run locally
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Streamlit Cloud
-Use `app.py` as the main file.
+Smoke test:
 
-## Test status
-- Python syntax checked: PASS
-- Decision engine import/test for V60A, VNGA80, VWCE: PASS
-- Streamlit server boot test: PASS
-- Offline fallback test: PASS
+```bash
+python backtest_smoke.py
+```
 
-The app loads even if Yahoo is temporarily unreachable. In that case it clearly warns that fallback/offline data is being used.
+
+## v7.3 final cosmetic patch
+
+- Page now starts with Today's markets.
+- Removed the left sidebar navigation.
+- Removed the duplicated Today's execution decision block.
+- Replaced emoji status labels with professional badges.
+- Market cards now show current value, today's move, 5-day move and 1-month move.
+- Kept the detailed ETF charts and timing logic from the v7.2.5 base.
+- Smoke test: `python backtest_smoke.py` passed in the build environment.
