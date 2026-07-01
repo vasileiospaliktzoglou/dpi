@@ -128,5 +128,53 @@ def css() -> str:
       .row { gap:8px; }
       .metric { white-space:normal; text-align:right; }
     }
+
+
+    /* Final responsive compatibility patch: keep the same visual design, but make it usable on phones/tablets. */
+    img, svg, canvas, iframe { max-width:100% !important; }
+    .element-container, .stPlotlyChart { max-width:100% !important; overflow-x:hidden !important; }
+    .js-plotly-plot, .plot-container, .svg-container { width:100% !important; max-width:100% !important; }
+
+    @media (max-width: 1024px) {
+      .block-container { max-width:100% !important; padding-left:1rem; padding-right:1rem; }
+      .cards, .timing-cards { grid-template-columns:repeat(2, minmax(0,1fr)); }
+      .card, .timing-card, .soft, .hero { overflow:hidden; }
+    }
+
+    @media (max-width: 760px) {
+      .block-container { padding-left:.75rem !important; padding-right:.75rem !important; }
+      .brandbar { display:block; }
+      .brand { font-size:26px; line-height:1.05; }
+      .sub, .stamp { font-size:12px; line-height:1.35; text-align:left; }
+      .section-title { font-size:17px; margin-top:18px; }
+      .cards, .timing-cards { grid-template-columns:1fr !important; gap:12px; }
+      .card, .timing-card { padding:15px; border-radius:18px; }
+      .row { align-items:flex-start; gap:10px; }
+      .metric { font-size:22px; white-space:normal; text-align:right; line-height:1.1; }
+      .stat-line { align-items:flex-start; }
+      .stat-label { max-width:68%; line-height:1.35; }
+      .stat-value { max-width:32%; }
+      .timing-head { gap:8px; }
+      .timing-score { font-size:24px; }
+      div[role="radiogroup"] { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px !important; }
+      div[role="radiogroup"] label { margin-right:0 !important; padding:8px 7px !important; justify-content:center; text-align:center; }
+    }
+
+    @media (max-width: 480px) {
+      .block-container { padding-left:.58rem !important; padding-right:.58rem !important; }
+      .brand { font-size:24px; }
+      .hero, .card, .timing-card, .soft { border-radius:16px; padding:13px; }
+      .eyebrow { font-size:10px; letter-spacing:.11em; }
+      .card h3 { font-size:16px; }
+      .muted, .stat-label { font-size:12px; }
+      .metric { font-size:20px; }
+      .status { font-size:10px; padding:5px 8px; }
+      .market-row { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+      .market-row > div:nth-child(2), .market-row > div:nth-child(3) { text-align:right; }
+      .market-row > div:nth-child(3) { grid-column:2; }
+      .plain { font-size:14px; }
+      div[role="radiogroup"] { grid-template-columns:1fr 1fr 1fr; }
+    }
+
     </style>
     """

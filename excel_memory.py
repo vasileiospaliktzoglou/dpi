@@ -11,14 +11,13 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from config import MEMORY_FILE, DATA_DIR
 
-SHEETS = ["Runs", "ETF_Decisions", "Market_Summary", "Learning", "Feature_Store", "Execution_Journal"]
+SHEETS = ["Runs", "ETF_Decisions", "Market_Summary", "Learning", "Feature_Store"]
 HEADERS = {
     "Runs": ["run_id", "timestamp", "version", "primary_etf", "primary_action"],
-    "ETF_Decisions": ["run_id", "timestamp", "etf", "action", "live_price", "target_price", "gap_pct", "confidence", "target_touch_1d", "target_touch_5d", "fair_value", "expected_low", "expected_high", "better_price_1d", "better_price_2d", "better_price_3d", "reason"],
+    "ETF_Decisions": ["run_id", "timestamp", "etf", "action", "live_price", "target_price", "gap_pct", "confidence", "target_touch_1d", "target_touch_5d", "reason"],
     "Market_Summary": ["run_id", "timestamp", "regime", "score", "summary", "drivers"],
     "Learning": ["run_id", "timestamp", "note"],
-    "Feature_Store": ["run_id", "timestamp", "etf", "atr", "rsi", "trend", "market_regime", "market_score", "gap_pct", "fair_value_gap_pct", "expected_low", "expected_high", "better_price_3d", "decision"],
-    "Execution_Journal": ["timestamp", "etf", "action", "execution_price", "shares", "amount_eur", "live_price", "suggested_limit", "fair_value", "expected_low", "expected_high", "better_price_1d", "better_price_2d", "better_price_3d", "confidence", "notes"],
+    "Feature_Store": ["run_id", "timestamp", "etf", "atr", "rsi", "trend", "market_regime", "market_score", "gap_pct", "decision"],
 }
 
 
@@ -111,24 +110,10 @@ def save_run(version: str, market, decisions: Dict[str, Any], primary) -> None:
         "run_id": run_id, "timestamp": now, "etf": d.symbol, "action": d.action,
         "live_price": d.live_price, "target_price": d.target_price, "gap_pct": d.gap_pct,
         "confidence": d.confidence_label, "target_touch_1d": d.target_touch_1d,
-        "target_touch_5d": d.target_touch_5d, "fair_value": d.fair_value,
-        "expected_low": d.expected_low, "expected_high": d.expected_high,
-        "better_price_1d": d.better_price_1d, "better_price_2d": d.better_price_2d,
-        "better_price_3d": d.better_price_3d, "reason": d.reason,
+        "target_touch_5d": d.target_touch_5d, "reason": d.reason,
     } for d in decisions.values()])
     append_rows("Feature_Store", [{
         "run_id": run_id, "timestamp": now, "etf": d.symbol, "atr": d.atr, "rsi": d.rsi,
         "trend": d.trend, "market_regime": market.regime, "market_score": market.score,
-        "gap_pct": d.gap_pct, "fair_value_gap_pct": d.fair_value_gap_pct,
-        "expected_low": d.expected_low, "expected_high": d.expected_high,
-        "better_price_3d": d.better_price_3d, "decision": d.action,
+        "gap_pct": d.gap_pct, "decision": d.action,
     } for d in decisions.values()])
-
-
-def append_execution(row: Dict[str, Any]) -> None:
-    """Save one real-world execution or skip/cancel decision.
-
-    This journal is intentionally simple: over time the rows can be compared with
-    later market prices to improve the model's limit-price and patience rules.
-    """
-    append_rows("Execution_Journal", [row])

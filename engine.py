@@ -56,19 +56,6 @@ class ETFDecision:
     history: pd.DataFrame
     data_source: str
     fetched_at: str
-    fair_value: float
-    fair_value_gap_pct: float
-    expected_low: float
-    expected_high: float
-    expected_range_note: str
-    better_price_1d: float
-    better_price_2d: float
-    better_price_3d: float
-    better_price_1d_count: int
-    better_price_2d_count: int
-    better_price_3d_count: int
-    better_price_sample: int
-    better_price_note: str
     estimated_saving_eur: float
 
 
@@ -86,85 +73,6 @@ def _target_touch_rates(df: pd.DataFrame, target_distance_atr: float) -> tuple[f
     n1, n5 = len(one), len(five)
     c1, c5 = int(sum(one)), int(sum(five))
     return (c1 / n1 * 100 if n1 else 0.0, c5 / n5 * 100 if n5 else 0.0, c1, c5, n1, n5)
-
-
-
-def _safe_quantile(series: pd.Series, q: float, default: float = 0.0) -> float:
-    clean = pd.to_numeric(series, errors="coerce").dropna()
-    if clean.empty:
-        return default
-    value = float(clean.quantile(q))
-    return default if pd.isna(value) else value
-
-
-def _fair_value_and_range(df: pd.DataFrame, previous_close: float) -> tuple[float, float, float, str]:
-    """Statistical fair value and expected intraday range from daily OHLC history.
-
-    Fair value here is not a valuation model. It is a short-term execution anchor:
-    yesterday's close adjusted by the ETF's recent median daily drift. The range uses
-    the historical 20th/80th percentile intraday low/high versus previous close.
-    """
-    work = df.copy().dropna(subset=["Open", "High", "Low", "Close"])
-    close = work["Close"].astype(float)
-    returns = close.pct_change().dropna()
-    recent_drift = float(returns.tail(63).median()) if len(returns) else 0.0
-    fair_value = previous_close * (1 + recent_drift)
-
-    prev = close.shift(1)
-    low_from_prev = (work["Low"].astype(float) / prev - 1.0) * 100.0
-    high_from_prev = (work["High"].astype(float) / prev - 1.0) * 100.0
-    # Middle 60% of intraday behaviour: useful for execution, not too wide.
-    low_pct = _safe_quantile(low_from_prev.tail(756), 0.20, -0.50)
-    high_pct = _safe_quantile(high_from_prev.tail(756), 0.80, 0.50)
-    expected_low = previous_close * (1 + low_pct / 100.0)
-    expected_high = previous_close * (1 + high_pct / 100.0)
-    note = f"20th–80th percentile range from the last ~3 years: {low_pct:+.2f}% to {high_pct:+.2f}% vs previous close."
-    return fair_value, expected_low, expected_high, note
-
-
-def _better_price_probabilities(df: pd.DataFrame, live_price: float, day_change_pct: float) -> tuple[float, float, float, int, int, int, int, str]:
-    """Probability of seeing a lower intraday price within 1/2/3 sessions.
-
-    Uses historical analog days with similar same-day close return. If too few analogs
-    exist, it falls back to all available history. This is a patience metric, not a forecast.
-    """
-    work = df.copy().dropna(subset=["Close", "Low"])
-    close = work["Close"].astype(float).reset_index(drop=True)
-    low = work["Low"].astype(float).reset_index(drop=True)
-    returns = close.pct_change().mul(100).reset_index(drop=True)
-    # Start with similar day-change analogs, widen if sample is too small.
-    mask = (returns - float(day_change_pct)).abs() <= 0.75
-    valid_idx = [i for i in range(30, len(work) - 3) if bool(mask.iloc[i])]
-    band = "±0.75%"
-    if len(valid_idx) < 40:
-        mask = (returns - float(day_change_pct)).abs() <= 1.25
-        valid_idx = [i for i in range(30, len(work) - 3) if bool(mask.iloc[i])]
-        band = "±1.25%"
-    if len(valid_idx) < 40:
-        valid_idx = list(range(30, len(work) - 3))
-        band = "all sessions"
-
-    def rate(days: int) -> tuple[float, int]:
-        hits = 0
-        total = 0
-        for i in valid_idx:
-            # Scale the next-days lows relative to that day's close; compare to current live.
-            current_ref = close.iloc[i]
-            if current_ref <= 0:
-                continue
-            future_low_ratio = low.iloc[i + 1:i + 1 + days].min() / current_ref
-            future_low_now = live_price * future_low_ratio
-            total += 1
-            if future_low_now < live_price:
-                hits += 1
-        return (hits / total * 100 if total else 0.0, hits)
-
-    p1, c1 = rate(1)
-    p2, c2 = rate(2)
-    p3, c3 = rate(3)
-    n = len(valid_idx)
-    note = f"Based on {n} historical analog sessions ({band} around today's move). It asks how often a lower intraday price appeared within 1, 2, or 3 trading days."
-    return p1, p2, p3, c1, c2, c3, n, note
 
 
 
@@ -319,9 +227,6 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
     gap_pct = (gap / target * 100) if target else 0.0
     r1, r5, c1, c5, n1, n5 = _target_touch_rates(df, offset)
     best_weekday, best_month_window, timing_score, timing_sample, timing_reason = _timing_edges(df, offset)
-    fair_value, expected_low, expected_high, expected_range_note = _fair_value_and_range(df, previous)
-    fair_gap_pct = ((live / fair_value) - 1) * 100 if fair_value else 0.0
-    bp1, bp2, bp3, bpc1, bpc2, bpc3, bp_n, bp_note = _better_price_probabilities(df, live, day_change_pct)
 
     planned = float(meta.get("planned_amount_eur", 10000))
     estimated_saving = planned * max(gap_pct, 0) / 100.0
@@ -348,7 +253,6 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
 
     reason = (
         f"{symbol} is €{gap:.2f} above the current limit target ({gap_pct:.2f}%). "
-        f"Fair-value anchor is €{fair_value:.2f} ({fair_gap_pct:+.2f}% vs live). "
         f"Across the 5-year test window, a similar target was touched within five trading days in {c5} of {n5} cases ({r5:.1f}%)."
     )
     guardrail = "Check the live bid/ask in IBKR before placing an order. The chart and statistics help execution discipline; they do not guarantee tomorrow's price."
@@ -358,9 +262,7 @@ def analyse_etf(symbol: str, market: MarketSummary, refresh_key: int = 0) -> ETF
         day_change_pct, target, gap, gap_pct, current_atr, current_rsi, trend,
         r1, r5, c1, c5, n1, n5, confidence_label, confidence_score, window,
         best_weekday, best_month_window, timing_score, timing_sample, timing_reason,
-        reason, guardrail, df, data_source, fetched_at, fair_value, fair_gap_pct,
-        expected_low, expected_high, expected_range_note, bp1, bp2, bp3,
-        bpc1, bpc2, bpc3, bp_n, bp_note, estimated_saving,
+        reason, guardrail, df, data_source, fetched_at, estimated_saving,
     )
 
 
