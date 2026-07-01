@@ -34,9 +34,26 @@ def bahrain_now() -> str:
     return (dt.datetime.utcnow() + dt.timedelta(hours=3)).strftime("%d %b %Y · %H:%M Bahrain")
 
 
-def change_class(x: float) -> str:
-    return "positive" if x >= 0 else "negative"
+def change_class(x: float | None) -> str:
+    try:
+        return "positive" if float(x) >= 0 else "negative"
+    except Exception:
+        return "neutral"
 
+
+def pct_or_na(x: float | None, signed: bool = True, max_abs: float = 50.0) -> str:
+    """Format a percentage only when it is plausible and finite.
+
+    This prevents misleading values caused by mixing a live quote with fallback
+    demo history when Yahoo returns one source but not the other.
+    """
+    try:
+        val = float(x)
+    except Exception:
+        return "n/a"
+    if not pd.notna(val) or abs(val) > max_abs:
+        return "n/a"
+    return pct(val, signed=signed)
 
 
 
@@ -134,13 +151,18 @@ def component_theme() -> str:
     </style>
     """
 def render_fragment(html: str, height: int | None = None) -> None:
-    """Render cards directly in Streamlit, not inside a fixed-height iframe.
+    """Render card HTML safely without fixed-height iframes.
 
-    This fixes mobile wrapping/cropping and prevents fragments of HTML from
-    appearing when the iframe height is too small. The height argument is kept
-    for backward compatibility but intentionally ignored.
+    Streamlit Markdown can sometimes treat long nested HTML fragments as text
+    when the fragment is malformed upstream or when mobile wrapping creates an
+    unusual parse boundary. st.html renders the fragment as HTML directly and
+    avoids raw <div> blocks appearing on the page. The height argument is kept
+    for backward compatibility and intentionally ignored.
     """
-    st.markdown(html, unsafe_allow_html=True)
+    if hasattr(st, "html"):
+        st.html(html)
+    else:
+        st.markdown(html, unsafe_allow_html=True)
 
 
 def topbar(fetched_at: str = "", interval_seconds: int = 60) -> None:
@@ -167,8 +189,8 @@ def render_market(market) -> None:
     market_cards = []
     for r in market.rows:
         cls = change_class(float(r["change_pct"]))
-        change_5d = float(r.get("change_5d_pct", 0.0))
-        change_1m = float(r.get("change_1m_pct", 0.0))
+        change_5d = r.get("change_5d_pct")
+        change_1m = r.get("change_1m_pct")
         cls5 = change_class(change_5d)
         cls1m = change_class(change_1m)
         market_cards.append(
@@ -183,8 +205,8 @@ def render_market(market) -> None:
               </div>
               <div class="market-price">{r['price']:,.2f}</div>
               <div class="market-sub">
-                <div><span>5 days</span><b class="{cls5}">{pct(change_5d, signed=True)}</b></div>
-                <div><span>1 month</span><b class="{cls1m}">{pct(change_1m, signed=True)}</b></div>
+                <div><span>5 days</span><b class="{cls5}">{pct_or_na(change_5d, signed=True)}</b></div>
+                <div><span>1 month</span><b class="{cls1m}">{pct_or_na(change_1m, signed=True)}</b></div>
               </div>
             </div>
             """

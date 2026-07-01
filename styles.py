@@ -186,5 +186,17 @@ def css() -> str:
       .section-title { font-size:17px; }
     }
 
-    </style>
+    
+/* Final card wrapping + safe market stat helpers */
+.neutral { color: var(--muted); font-weight: 800; white-space: nowrap; }
+.market-sub b { display:block; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.market-card, .card, .timing-card { word-break: normal; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .market-sub { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .market-sub div { min-width: 0; }
+  .market-sub span { font-size: 9px; }
+  .market-sub b { font-size: 11px; }
+}
+
+</style>
     """

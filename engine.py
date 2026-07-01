@@ -157,18 +157,24 @@ def build_market_summary(refresh_key: int = 0) -> MarketSummary:
     for label, ticker in MARKET_TICKERS.items():
         q = latest_quote(ticker, refresh_key)
         fetched = q.get("fetched_at", fetched) or fetched
-        change_5d = 0.0
-        change_1m = 0.0
+        change_5d = None
+        change_1m = None
         try:
-            hist = fetch_history(ticker, "3mo", refresh_key).history
+            bundle = fetch_history(ticker, "3mo", refresh_key)
+            hist = bundle.history
             closes = hist["Close"].astype(float).dropna()
-            if len(closes) > 6 and closes.iloc[-6] != 0:
-                change_5d = (q["price"] / float(closes.iloc[-6]) - 1) * 100
-            if len(closes) > 22 and closes.iloc[-22] != 0:
-                change_1m = (q["price"] / float(closes.iloc[-22]) - 1) * 100
+            # Do not compare a live Yahoo quote with synthetic/demo history.
+            # That produced impossible values such as +327% for SPY.
+            compatible_sources = not ("demo" in str(bundle.source).lower() and "live" in str(q.get("source", "")).lower())
+            if compatible_sources and len(closes) > 6 and closes.iloc[-6] != 0:
+                value_5d = (q["price"] / float(closes.iloc[-6]) - 1) * 100
+                change_5d = value_5d if abs(value_5d) <= 50 else None
+            if compatible_sources and len(closes) > 22 and closes.iloc[-22] != 0:
+                value_1m = (q["price"] / float(closes.iloc[-22]) - 1) * 100
+                change_1m = value_1m if abs(value_1m) <= 50 else None
         except Exception:
-            change_5d = 0.0
-            change_1m = 0.0
+            change_5d = None
+            change_1m = None
         rows.append({
             "label": "MSCI World" if label == "Global stocks" else label,
             "ticker": ticker,
