@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-except Exception:  # dependency may be absent in local installs
-    st_autorefresh = None
+from streamlit_autorefresh import st_autorefresh
 
 from config import APP_TITLE, APP_VERSION, LOG_DIR, LOG_FILE
 from styles import css
@@ -60,6 +57,102 @@ def pct_or_na(x: float | None, signed: bool = True, max_abs: float = 50.0) -> st
     return pct(val, signed=signed)
 
 
+def plain_number(x: float | None, default: float = 0.0) -> float:
+    """Return a safe numeric value for UI calculations."""
+    try:
+        val = float(x)
+    except Exception:
+        return default
+    return val if pd.notna(val) else default
+
+
+def find_market_row(market, tickers: tuple[str, ...]):
+    """Return the first market row matching one of the provided tickers."""
+    wanted = {t.upper() for t in tickers}
+    for row in getattr(market, "rows", []):
+        if str(row.get("ticker", "")).upper() in wanted:
+            return row
+    return None
+
+
+def market_move(row) -> float:
+    return plain_number(row.get("change_pct")) if row else 0.0
+
+
+def classify_market_mood(market) -> tuple[str, str]:
+    """Classify today's market mood using the live market rows already in the app."""
+    world = market_move(find_market_row(market, ("URTH", "ACWI", "VT")))
+    sp500 = market_move(find_market_row(market, ("SPY", "^GSPC", "VOO")))
+    europe = market_move(find_market_row(market, ("VGK", "FEZ", "^STOXX")))
+    vix = market_move(find_market_row(market, ("^VIX", "VIX")))
+    bonds = market_move(find_market_row(market, ("IEF", "TLT", "AGG")))
+
+    risk_score = 0
+    risk_score += 1 if world > 0 else -1 if world < 0 else 0
+    risk_score += 1 if sp500 > 0 else -1 if sp500 < 0 else 0
+    risk_score += 1 if europe > 0 else -1 if europe < 0 else 0
+    risk_score += 1 if vix < 0 else -1 if vix > 0 else 0
+    risk_score += 1 if bonds >= 0 else 0
+
+    if risk_score >= 3:
+        return "Positive", "Risk appetite improved today. Stronger equity markets and/or lower volatility usually make limit orders slightly less likely to fill immediately."
+    if risk_score <= -2:
+        return "Defensive", "Markets were more cautious today. Softer equities or higher volatility can improve the chance that lower limit targets are reached."
+    return "Mixed", "Markets were mixed today. The evidence does not strongly favour chasing prices or cancelling existing limits."
+
+
+def build_daily_brief(market, decisions, primary) -> dict:
+    """Create a concise daily brief: what happened, did we miss anything, and action."""
+    mood, meaning = classify_market_mood(market)
+    rows = getattr(market, "rows", [])
+    movers = []
+    for row in rows[:6]:
+        label = row.get("label", row.get("ticker", "Market"))
+        change = plain_number(row.get("change_pct"))
+        if abs(change) >= 0.01:
+            direction = "rose" if change >= 0 else "fell"
+            movers.append(f"{label} {direction} {pct(abs(change))}")
+
+    above_target = []
+    total_gap_value = 0.0
+    total_expected_saving = 0.0
+    for d in decisions.values():
+        gap_pct = plain_number(getattr(d, "gap_pct", 0.0))
+        gap_eur = plain_number(getattr(d, "gap_eur", 0.0))
+        saving = plain_number(getattr(d, "estimated_saving_eur", 0.0))
+        total_expected_saving += max(saving, 0.0)
+        if gap_pct > 0:
+            above_target.append(f"{d.symbol} is {pct(gap_pct)} above target")
+            total_gap_value += max(saving, 0.0)
+        elif gap_eur <= 0:
+            above_target.append(f"{d.symbol} is at or below target")
+
+    if total_gap_value > 0:
+        missed = (
+            f"No clear execution was missed. The targets were still below the live prices. "
+            f"Buying immediately instead of waiting for the model targets would cost about {money(total_gap_value)} more across the model deployment amounts."
+        )
+    else:
+        missed = "At least one target appears to be reached or very close. Review the selected ETF and confirm final bid/ask in your broker."
+
+    primary_symbol = getattr(primary, "symbol", next(iter(decisions.keys()), "selected ETF"))
+    primary_action = getattr(primary, "action", "Wait with limit")
+
+    action = (
+        f"Maintain the current plan for {primary_symbol}: {primary_action.lower()}. "
+        "Do not chase unless the target, spread, and broker quote confirm a better entry."
+    )
+
+    return {
+        "mood": mood,
+        "meaning": meaning,
+        "movers": movers[:4],
+        "missed": missed,
+        "action": action,
+        "total_expected_saving": total_expected_saving,
+        "above_target": above_target[:3],
+    }
+
 
 def is_market_window_bahrain(now: dt.datetime | None = None) -> bool:
     """Broad trading-data window covering Europe + US sessions in Bahrain time.
@@ -76,11 +169,13 @@ def is_market_window_bahrain(now: dt.datetime | None = None) -> bool:
 
 
 def refresh_interval_seconds() -> int:
-    """Refresh cadence aligned with Yahoo-style delayed ETF data.
+    """Refresh market quotes on a 15-minute cadence during trading hours.
 
-    During the broad Europe/US trading window the app reruns every 15 minutes.
-    Outside trading hours it reruns every 60 minutes. This avoids unnecessary
-    flicker/rate-limit pressure while keeping ETF deployment data fresh enough.
+    PALI EXECUTE is an ETF deployment decision-support tool, not a
+    second-by-second trading terminal. A 15-minute cadence aligns better with
+    Yahoo/yfinance data behaviour, reduces unnecessary reruns, and is more
+    stable on mobile/PWA. Outside the broad Europe + US trading window, refresh
+    hourly because prices rarely change meaningfully.
     """
     return 900 if is_market_window_bahrain() else 3600
 
@@ -177,8 +272,9 @@ def render_fragment(html: str, height: int | None = None) -> None:
 
 def topbar(fetched_at: str = "", interval_seconds: int = 60) -> None:
     subtitle = "ETF execution dashboard · V60A · VNGA80 · VWCE"
-    refresh_text = f"auto-refresh {interval_seconds}s" if interval_seconds < 60 else f"auto-refresh {interval_seconds // 60}min"
-    stamp = f"<span class=\"live-dot\"></span> Live · updated {fetched_at or bahrain_now()} · {refresh_text}"
+    # Keep the header clean: show only the latest available data timestamp.
+    # The refresh cadence is handled silently in the background.
+    stamp = f"<span class=\"live-dot\"></span> Updated {fetched_at or bahrain_now()}"
     st.markdown(
         f"""
         <div class="brandbar">
@@ -243,6 +339,38 @@ def status_class(action: str) -> str:
     if action == "Wait with limit":
         return "status-wait"
     return "status-monitor"
+
+
+def render_daily_brief(market, decisions, primary) -> None:
+    """Render the 'what happened today' card below Today's Markets."""
+    brief = build_daily_brief(market, decisions, primary)
+    movers_html = "".join(f"<div class='muted'>• {m}</div>" for m in brief["movers"])
+    target_html = "".join(f"<div class='muted'>• {x}</div>" for x in brief["above_target"])
+
+    render_fragment(
+        f"""
+        <div class="card">
+          <div class="eyebrow">AI daily brief</div>
+          <h3>What happened today: {brief['mood']}</h3>
+          <p class="muted" style="color:var(--text2);font-size:15px;line-height:1.55;margin:8px 0 0">{brief['meaning']}</p>
+          <div class="divider"></div>
+          <div class="row" style="align-items:flex-start">
+            <div>
+              <div class="eyebrow">Market moves</div>
+              {movers_html or "<div class='muted'>• Market moves were small or unavailable.</div>"}
+            </div>
+            <div>
+              <div class="eyebrow">ETF targets</div>
+              {target_html or "<div class='muted'>• Targets are very close or data is unavailable.</div>"}
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="muted" style="color:var(--text2);font-size:15px;line-height:1.55"><b>Did we miss today?</b> {brief['missed']}</div>
+          <div class="muted" style="margin-top:8px;color:var(--text2);font-size:15px;line-height:1.55"><b>Next action:</b> {brief['action']}</div>
+        </div>
+        """,
+        height=330,
+    )
 
 
 def render_etf_cards(decisions) -> None:
@@ -400,21 +528,13 @@ def load_system(refresh_key: int):
 
 
 def install_auto_refresh(seconds: int = 900) -> None:
-    """Native Streamlit rerun without forcing a full browser reload.
+    """Trigger a Streamlit rerun without forcing a browser page reload.
 
-    Important:
-    - This replaces the old window.parent.location.reload() approach.
-    - It avoids the white flash/full-page reload on mobile and PWA.
-    - It still reruns Streamlit at the selected cadence so live data can update.
-    - Requires streamlit-autorefresh in requirements.txt.
+    This is smoother on mobile/PWA than window.location.reload(). The script
+    still reruns, because that is how Streamlit updates data, but the browser
+    tab itself is not hard-refreshed.
     """
-    if st_autorefresh is not None:
-        st_autorefresh(interval=seconds * 1000, key="market_refresh")
-    else:
-        logging.warning(
-            "streamlit-autorefresh is not installed; automatic refresh is disabled. "
-            "Add streamlit-autorefresh to requirements.txt to enable it."
-        )
+    st_autorefresh(interval=seconds * 1000, key="pali_market_refresh")
 
 
 def install_pwa_metadata() -> None:
@@ -469,6 +589,7 @@ def main() -> None:
     topbar(market.fetched_at, interval)
 
     render_market(market)
+    render_daily_brief(market, decisions, primary)
     render_etf_cards(decisions)
     render_timing_plan(decisions)
     selected = select_etf(decisions)
