@@ -39,6 +39,39 @@ def change_class(x: float) -> str:
 
 
 
+
+def is_market_window_bahrain(now: dt.datetime | None = None) -> bool:
+    """Broad trading-data window covering Europe + US sessions in Bahrain time.
+
+    Yahoo quote timestamps are not exact, so this deliberately uses a practical
+    window rather than exchange-specific seconds. Outside this window the app
+    refreshes more slowly to reduce unnecessary calls.
+    """
+    now = now or (dt.datetime.utcnow() + dt.timedelta(hours=3))
+    if now.weekday() >= 5:
+        return False
+    minutes = now.hour * 60 + now.minute
+    return (10 * 60) <= minutes <= (24 * 60 - 5)
+
+
+def refresh_interval_seconds() -> int:
+    return 15 if is_market_window_bahrain() else 300
+
+
+def quote_signature(market, decisions) -> tuple:
+    """Small signature used to detect whether prices changed materially."""
+    market_sig = tuple((r.get('ticker'), round(float(r.get('price', 0.0)), 4), round(float(r.get('change_pct', 0.0)), 4)) for r in market.rows)
+    etf_sig = tuple((sym, round(float(d.live_price), 4), round(float(d.day_change_pct), 4)) for sym, d in decisions.items())
+    return market_sig + etf_sig
+
+
+def should_save_memory(market, decisions) -> bool:
+    """Persist only when fresh quotes changed, avoiding duplicate Excel writes on refresh reruns."""
+    sig = quote_signature(market, decisions)
+    previous = st.session_state.get('_last_quote_signature')
+    st.session_state['_last_quote_signature'] = sig
+    return sig != previous
+
 def component_theme() -> str:
     return """
     <style>
@@ -94,8 +127,9 @@ def component_theme() -> str:
       .stat-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; }
       .stat-label { color:var(--muted); font-size:13px; }
       .stat-value { color:var(--text); font-weight:850; text-align:right; }
-      @media (max-width:920px) { .cards, .timing-cards, .market-grid { grid-template-columns:1fr; } }
-      @media (max-width:640px) { .card { border-radius:18px; padding:15px; } .metric { font-size:23px; } .market-card { border-radius:18px; padding:14px; } }
+      @media (max-width:920px) { .cards, .timing-cards, .market-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+      @media (max-width:760px) { .cards, .timing-cards, .market-grid { grid-template-columns:1fr; } .stat-line { align-items:flex-start; } .stat-label { max-width:62%; } .stat-value { max-width:38%; } }
+      @media (max-width:640px) { .card { border-radius:18px; padding:15px; width:100%; } .metric { font-size:23px; } .market-card { border-radius:18px; padding:14px; } .row .metric { max-width:48%; } }
       @media (max-width:430px) { .row { gap:8px; } .metric { white-space:normal; text-align:right; } .market-price { font-size:23px; } }
     </style>
     """
@@ -103,96 +137,10 @@ def render_fragment(html: str, height: int) -> None:
     components.html(component_theme() + html, height=height, scrolling=False)
 
 
-
-def is_market_window() -> bool:
-    """Broad quote-refresh window for European/US market hours.
-
-    Yahoo quote updates are not published on a guaranteed schedule, so the app
-    refreshes more often during the combined European/US session and slows down
-    outside trading hours. This keeps the data as fresh as practical without
-    changing the visual design or overloading the data provider.
-    """
-    now = dt.datetime.utcnow()
-    if now.weekday() >= 5:
-        return False
-    # Approx. 10:00-00:00 Bahrain = 07:00-21:00 UTC, covering Xetra/LSE + US.
-    return 7 <= now.hour < 21
-
-
-def refresh_interval_seconds() -> int:
-    return 15 if is_market_window() else 300
-
-
-def refresh_status_text(seconds: int) -> str:
-    status = "LIVE" if is_market_window() else "MARKET CLOSED"
-    return f"{status} · auto-refresh {seconds}s"
-
-
-def refresh_bucket(seconds: int) -> int:
-    return int(time.time() // max(seconds, 1))
-
-
-def install_pwa_support() -> None:
-    """Inject lightweight PWA metadata without changing the app layout.
-
-    This allows compatible browsers to offer an install-to-home-screen option.
-    If service-worker registration is blocked by the hosting environment, the
-    app continues normally.
-    """
-    components.html(
-        """
-        <script>
-        (function(){
-          const doc = window.parent.document;
-          if (!doc.querySelector('meta[name="theme-color"]')) {
-            const theme = doc.createElement('meta');
-            theme.name = 'theme-color';
-            theme.content = '#0D1424';
-            doc.head.appendChild(theme);
-          }
-          if (!doc.querySelector('link[rel="apple-touch-icon"]')) {
-            const icon = doc.createElement('link');
-            icon.rel = 'apple-touch-icon';
-            icon.href = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"%3E%3Crect width="192" height="192" rx="42" fill="%230D1424"/%3E%3Ctext x="96" y="116" text-anchor="middle" font-family="Arial" font-size="72" font-weight="800" fill="%237CB7FF"%3EP%3C/text%3E%3C/svg%3E';
-            doc.head.appendChild(icon);
-          }
-          if (!doc.querySelector('link[rel="manifest"]')) {
-            const manifest = {
-              name: 'PALI EXECUTE',
-              short_name: 'PALI',
-              start_url: '.',
-              display: 'standalone',
-              background_color: '#0D1424',
-              theme_color: '#0D1424',
-              icons: [{
-                src: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"%3E%3Crect width="192" height="192" rx="42" fill="%230D1424"/%3E%3Ctext x="96" y="116" text-anchor="middle" font-family="Arial" font-size="72" font-weight="800" fill="%237CB7FF"%3EP%3C/text%3E%3C/svg%3E',
-                sizes: '192x192',
-                type: 'image/svg+xml'
-              }]
-            };
-            const blob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
-            const link = doc.createElement('link');
-            link.rel = 'manifest';
-            link.href = URL.createObjectURL(blob);
-            doc.head.appendChild(link);
-          }
-          try {
-            if ('serviceWorker' in window.parent.navigator) {
-              const swCode = "self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('fetch',e=>{});";
-              const swBlob = new Blob([swCode], {type: 'text/javascript'});
-              const swUrl = URL.createObjectURL(swBlob);
-              window.parent.navigator.serviceWorker.register(swUrl).catch(()=>{});
-            }
-          } catch(e) {}
-        })();
-        </script>
-        """,
-        height=0,
-    )
-
-def topbar(fetched_at: str = "", refresh_seconds: int = 60) -> None:
+def topbar(fetched_at: str = "", interval_seconds: int = 60) -> None:
     subtitle = "ETF execution dashboard · V60A · VNGA80 · VWCE"
-    stamp = f"<span class=\"live-dot\"></span> {refresh_status_text(refresh_seconds)} · updated {fetched_at or bahrain_now()}"
+    refresh_text = f"auto-refresh {interval_seconds}s" if interval_seconds < 60 else f"auto-refresh {interval_seconds // 60}min"
+    stamp = f"<span class=\"live-dot\"></span> Live · updated {fetched_at or bahrain_now()} · {refresh_text}"
     st.markdown(
         f"""
         <div class="brandbar">
@@ -395,7 +343,7 @@ def render_analytics(decisions) -> None:
     st.dataframe(table, use_container_width=True, hide_index=True)
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_system_cached(refresh_key: int):
     market, decisions = build_decisions(refresh_key)
     primary = choose_primary(decisions)
@@ -406,7 +354,8 @@ def load_system(refresh_key: int):
     with st.spinner("Updating live market data and decisions..."):
         market, decisions, primary = load_system_cached(refresh_key)
         try:
-            save_run(APP_VERSION, market, decisions, primary)
+            if should_save_memory(market, decisions):
+                save_run(APP_VERSION, market, decisions, primary)
         except Exception:
             logging.exception("Internal Excel memory update failed")
         return market, decisions, primary
@@ -416,7 +365,43 @@ def install_auto_refresh(seconds: int = 60) -> None:
     components.html(
         f"""
         <script>
-          setTimeout(function() {{ window.parent.location.reload(); }}, {seconds * 1000});
+          window.setTimeout(function() {{
+            window.parent.location.reload();
+          }}, {seconds * 1000});
+        </script>
+        """,
+        height=0,
+    )
+
+
+def install_pwa_metadata() -> None:
+    # Streamlit does not expose full document-head control, so inject lightweight PWA tags.
+    components.html(
+        """
+        <script>
+          const d = window.parent.document;
+          function ensureLink(rel, href) {
+            if (!d.querySelector('link[rel="' + rel + '"]')) {
+              const l = d.createElement('link');
+              l.rel = rel; l.href = href;
+              d.head.appendChild(l);
+            }
+          }
+          function ensureMeta(name, content) {
+            if (!d.querySelector('meta[name="' + name + '"]')) {
+              const m = d.createElement('meta');
+              m.name = name; m.content = content;
+              d.head.appendChild(m);
+            }
+          }
+          ensureLink('manifest', './manifest.webmanifest');
+          ensureMeta('theme-color', '#0D1424');
+          ensureMeta('apple-mobile-web-app-capable', 'yes');
+          ensureMeta('apple-mobile-web-app-title', 'PALI EXECUTE');
+          ensureMeta('mobile-web-app-capable', 'yes');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./service-worker.js').catch(function(){ });
+          }
         </script>
         """,
         height=0,
@@ -424,10 +409,11 @@ def install_auto_refresh(seconds: int = 60) -> None:
 
 
 def main() -> None:
-    interval = refresh_interval_seconds()
-    st.session_state["refresh_key"] = refresh_bucket(interval)
+    if "refresh_key" not in st.session_state:
+        st.session_state["refresh_key"] = 0
 
-    install_pwa_support()
+    interval = refresh_interval_seconds()
+    install_pwa_metadata()
     install_auto_refresh(interval)
 
     market, decisions, primary = load_system(st.session_state["refresh_key"])

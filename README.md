@@ -36,8 +36,9 @@ python backtest_smoke.py
 - Smoke test: `python backtest_smoke.py` passed in the build environment.
 
 
-## v7.3.1 final compatibility patch
-
-- Smart auto-refresh: 15 seconds during the broad Europe/US market window, 5 minutes outside it.
-- Lightweight PWA metadata for install-to-home-screen support where the host/browser allows it.
-- Responsive CSS only: the design is unchanged, but cards, charts, and text now fit tablet and mobile screens better.
+## v7.3.1 Final Responsive Patch
+- Smart auto-refresh: 15 seconds during the broad market window, 5 minutes outside.
+- Internal memory saves only when quote values change.
+- Responsive CSS only: same design, better wrapping on tablet/mobile.
+- Plotly charts remain full-width on phone screens.
+- PWA metadata added for install-to-home-screen support where Streamlit hosting allows it.

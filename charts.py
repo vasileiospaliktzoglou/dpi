@@ -46,10 +46,11 @@ def price_chart(df: pd.DataFrame, symbol: str, target: float, view: str = "6M"):
     fig.add_trace(go.Bar(x=plot_df.index, y=plot_df["Volume"], name="Volume", marker_color="rgba(148,163,184,.36)"), row=2, col=1)
 
     fig.update_layout(
-        height=480,
-        margin=dict(l=8, r=8, t=30, b=8),
+        height=520,
+        margin=dict(l=4, r=4, t=30, b=8),
         title=f"{symbol} chart · {view}",
         hovermode="x unified",
+        autosize=True,
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -59,7 +60,7 @@ def price_chart(df: pd.DataFrame, symbol: str, target: float, view: str = "6M"):
     )
     fig.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,.13)", row=1, col=1)
     fig.update_yaxes(showgrid=False, title=None, row=2, col=1)
-    fig.update_xaxes(showgrid=False)
+    fig.update_xaxes(showgrid=False, automargin=True)
     return fig
 
 
