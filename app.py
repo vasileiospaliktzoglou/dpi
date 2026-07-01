@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:  # dependency may be absent in local installs
+    st_autorefresh = None
 
 from config import APP_TITLE, APP_VERSION, LOG_DIR, LOG_FILE
 from styles import css
@@ -72,7 +76,13 @@ def is_market_window_bahrain(now: dt.datetime | None = None) -> bool:
 
 
 def refresh_interval_seconds() -> int:
-    return 15 if is_market_window_bahrain() else 300
+    """Refresh cadence aligned with Yahoo-style delayed ETF data.
+
+    During the broad Europe/US trading window the app reruns every 15 minutes.
+    Outside trading hours it reruns every 60 minutes. This avoids unnecessary
+    flicker/rate-limit pressure while keeping ETF deployment data fresh enough.
+    """
+    return 900 if is_market_window_bahrain() else 3600
 
 
 def quote_signature(market, decisions) -> tuple:
@@ -371,7 +381,7 @@ def render_analytics(decisions) -> None:
     st.dataframe(table, use_container_width=True, hide_index=True)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)
 def load_system_cached(refresh_key: int):
     market, decisions = build_decisions(refresh_key)
     primary = choose_primary(decisions)
@@ -389,17 +399,22 @@ def load_system(refresh_key: int):
         return market, decisions, primary
 
 
-def install_auto_refresh(seconds: int = 60) -> None:
-    components.html(
-        f"""
-        <script>
-          window.setTimeout(function() {{
-            window.parent.location.reload();
-          }}, {seconds * 1000});
-        </script>
-        """,
-        height=0,
-    )
+def install_auto_refresh(seconds: int = 900) -> None:
+    """Native Streamlit rerun without forcing a full browser reload.
+
+    Important:
+    - This replaces the old window.parent.location.reload() approach.
+    - It avoids the white flash/full-page reload on mobile and PWA.
+    - It still reruns Streamlit at the selected cadence so live data can update.
+    - Requires streamlit-autorefresh in requirements.txt.
+    """
+    if st_autorefresh is not None:
+        st_autorefresh(interval=seconds * 1000, key="market_refresh")
+    else:
+        logging.warning(
+            "streamlit-autorefresh is not installed; automatic refresh is disabled. "
+            "Add streamlit-autorefresh to requirements.txt to enable it."
+        )
 
 
 def install_pwa_metadata() -> None:
