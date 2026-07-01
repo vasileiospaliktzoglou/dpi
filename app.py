@@ -133,8 +133,14 @@ def component_theme() -> str:
       @media (max-width:430px) { .row { gap:8px; } .metric { white-space:normal; text-align:right; } .market-price { font-size:23px; } }
     </style>
     """
-def render_fragment(html: str, height: int) -> None:
-    components.html(component_theme() + html, height=height, scrolling=False)
+def render_fragment(html: str, height: int | None = None) -> None:
+    """Render cards directly in Streamlit, not inside a fixed-height iframe.
+
+    This fixes mobile wrapping/cropping and prevents fragments of HTML from
+    appearing when the iframe height is too small. The height argument is kept
+    for backward compatibility but intentionally ignored.
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def topbar(fetched_at: str = "", interval_seconds: int = 60) -> None:
@@ -375,32 +381,38 @@ def install_auto_refresh(seconds: int = 60) -> None:
 
 
 def install_pwa_metadata() -> None:
-    # Streamlit does not expose full document-head control, so inject lightweight PWA tags.
+    # Streamlit serves ./static when [server] enableStaticServing=true.
+    # We inject metadata into the parent document so Android/iOS can offer
+    # Add to Home Screen without changing the visual design.
     components.html(
         """
         <script>
           const d = window.parent.document;
-          function ensureLink(rel, href) {
-            if (!d.querySelector('link[rel="' + rel + '"]')) {
-              const l = d.createElement('link');
-              l.rel = rel; l.href = href;
-              d.head.appendChild(l);
-            }
+          function upsertLink(rel, href, extra) {
+            let l = d.querySelector('link[rel="' + rel + '"]');
+            if (!l) { l = d.createElement('link'); l.rel = rel; d.head.appendChild(l); }
+            l.href = href;
+            if (extra) { Object.keys(extra).forEach(k => l.setAttribute(k, extra[k])); }
           }
-          function ensureMeta(name, content) {
-            if (!d.querySelector('meta[name="' + name + '"]')) {
-              const m = d.createElement('meta');
-              m.name = name; m.content = content;
-              d.head.appendChild(m);
-            }
+          function upsertMeta(name, content) {
+            let m = d.querySelector('meta[name="' + name + '"]');
+            if (!m) { m = d.createElement('meta'); m.name = name; d.head.appendChild(m); }
+            m.content = content;
           }
-          ensureLink('manifest', './manifest.webmanifest');
-          ensureMeta('theme-color', '#0D1424');
-          ensureMeta('apple-mobile-web-app-capable', 'yes');
-          ensureMeta('apple-mobile-web-app-title', 'PALI EXECUTE');
-          ensureMeta('mobile-web-app-capable', 'yes');
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./service-worker.js').catch(function(){ });
+          const base = window.parent.location.origin + '/app/static/';
+          upsertLink('manifest', base + 'manifest.webmanifest');
+          upsertLink('apple-touch-icon', base + 'icon-192.png');
+          upsertMeta('theme-color', '#0D1424');
+          upsertMeta('apple-mobile-web-app-capable', 'yes');
+          upsertMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+          upsertMeta('apple-mobile-web-app-title', 'PALI EXECUTE');
+          upsertMeta('mobile-web-app-capable', 'yes');
+          upsertMeta('application-name', 'PALI EXECUTE');
+          // Service worker support in Streamlit is host-dependent; metadata works
+          // for Add to Home Screen where the browser permits it.
+          if ('serviceWorker' in window.parent.navigator) {
+            window.parent.navigator.serviceWorker.register(base + 'service-worker.js', {scope: '/app/static/'})
+              .catch(function(){ });
           }
         </script>
         """,

@@ -30,7 +30,8 @@ def css() -> str:
     }
     [data-testid="stSidebar"] { display:none !important; }
     .block-container { padding-top:.55rem; padding-bottom:2.2rem; max-width:1180px; }
-    * { box-sizing:border-box; overflow-wrap:anywhere; word-break:normal; }
+    * { box-sizing:border-box; }
+    .card, .timing-card, .market-card, .soft, .mini { overflow-wrap:break-word; word-break:normal; }
 
     .brandbar {
       display:flex; align-items:center; justify-content:space-between; gap:14px;
@@ -60,6 +61,26 @@ def css() -> str:
 
     .section-title { margin:24px 0 10px; font-size:18px; font-weight:900; letter-spacing:-.025em; color:var(--text); }
     .first-section { margin-top:8px; }
+
+    .market-grid { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:12px; margin:12px 0; }
+    .market-card {
+      background:linear-gradient(180deg,rgba(26,39,64,.98),rgba(21,32,51,.94));
+      border:1px solid var(--line); border-radius:20px; padding:15px; min-width:0;
+      box-shadow:0 14px 34px rgba(4,8,18,.16); overflow:hidden;
+    }
+    .market-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; min-width:0; }
+    .market-name { font-weight:850; font-size:14px; line-height:1.15; color:var(--text); overflow-wrap:normal; word-break:normal; }
+    .ticker { color:var(--muted); font-size:11px; margin-top:3px; letter-spacing:.06em; white-space:nowrap; }
+    .market-price { font-size:clamp(20px,3vw,27px); font-weight:950; letter-spacing:-.04em; margin-top:10px; white-space:nowrap; color:var(--text); }
+    .market-move { font-size:13px; font-weight:900; white-space:nowrap; padding:4px 8px; border-radius:999px; background:rgba(159,176,199,.10); }
+    .market-sub { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:11px; }
+    .market-sub div { background:rgba(159,176,199,.08); border-radius:12px; padding:7px 8px; min-width:0; }
+    .market-sub span { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; white-space:nowrap; }
+    .market-sub b { font-size:12px; white-space:nowrap; }
+    .status { display:inline-flex; align-items:center; border-radius:999px; padding:5px 9px; font-size:11px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; white-space:normal; max-width:100%; line-height:1.15; }
+    .status-wait { color:var(--warn); background:rgba(244,183,64,.16); border:1px solid rgba(244,183,64,.30); }
+    .status-ready { color:var(--good); background:rgba(61,220,132,.14); border:1px solid rgba(61,220,132,.30); }
+    .status-monitor { color:var(--muted); background:rgba(159,176,199,.10); border:1px solid var(--line); }
     .cards, .timing-cards { display:grid; grid-template-columns:repeat(3, minmax(245px,1fr)); gap:14px; margin:12px 0; }
     .card, .timing-card {
       background:rgba(21,32,51,.94); border:1px solid var(--line); border-radius:22px; padding:18px;
@@ -103,11 +124,12 @@ def css() -> str:
     .stButton > button:hover { border-color:rgba(124,183,255,.55) !important; background:rgba(26,39,64,.98) !important; }
 
     @media (max-width: 920px) {
-      .cards, .timing-cards { grid-template-columns:1fr; }
+      .cards, .timing-cards, .market-grid { grid-template-columns:1fr 1fr; }
       .hero-grid { grid-template-columns:1fr; }
     }
     @media (max-width: 640px) {
       .block-container { padding-left:.72rem; padding-right:.72rem; padding-top:.45rem; }
+      .market-grid { grid-template-columns:1fr; }
       .brandbar { display:block; margin-bottom:10px; }
       .brand { font-size:27px; }
       .stamp { text-align:left; margin-top:4px; }
@@ -134,11 +156,11 @@ def css() -> str:
     .js-plotly-plot, .plot-container, .svg-container { width:100% !important; max-width:100% !important; }
 
     @media (max-width: 920px) {
-      .cards, .timing-cards { grid-template-columns:1fr 1fr; }
+      .cards, .timing-cards, .market-grid { grid-template-columns:1fr 1fr; }
       .card, .timing-card { min-height:auto; }
     }
     @media (max-width: 760px) {
-      .cards, .timing-cards { grid-template-columns:1fr; }
+      .cards, .timing-cards, .market-grid { grid-template-columns:1fr; }
       .stat-line { align-items:flex-start; }
       .stat-label { max-width:62%; }
       .stat-value { max-width:38%; overflow-wrap:normal; word-break:keep-all; }
@@ -148,7 +170,7 @@ def css() -> str:
       .block-container { padding-left:.72rem !important; padding-right:.72rem !important; }
       .card, .timing-card { width:100%; }
       .row { align-items:flex-start; }
-      .row .metric { flex-shrink:0; max-width:48%; }
+      .row .metric { flex-shrink:1; max-width:46%; overflow-wrap:normal; word-break:keep-all; }
       .card h3 { font-size:16px; }
       .muted { font-size:12.5px; }
       .stat-line { padding:8px 0; }

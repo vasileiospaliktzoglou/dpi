@@ -42,3 +42,10 @@ python backtest_smoke.py
 - Responsive CSS only: same design, better wrapping on tablet/mobile.
 - Plotly charts remain full-width on phone screens.
 - PWA metadata added for install-to-home-screen support where Streamlit hosting allows it.
+
+
+## v7.3.3 final mobile/PWA fix
+- Card sections now render directly in Streamlit instead of fixed-height iframes, fixing mobile card wrapping/cropping.
+- Market and ETF cards keep the same visual design but flow to 2 columns on tablet and 1 column on phone.
+- Charts remain full width on phone.
+- PWA metadata is served from `/app/static/` with Streamlit static serving enabled. Browser install support still depends on the hosting platform and HTTPS.
